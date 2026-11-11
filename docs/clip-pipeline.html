@@ -1,0 +1,379 @@
+<title>Clip Pipeline</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one editing-timeline "scrubber" across the top, a stage rail beneath it,
+   and a detail panel that shows what each stage writes into the repo. */
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #16202e;
+  --muted: #5b6878;
+  --line: #d9e0e9;
+  --accent: #2450c2;      /* cobalt: selection, active stage */
+  --accent-soft: #e3eafb;
+  --heat: #e0782a;        /* amber: viewer "most replayed" heat */
+  --heat-soft: #fbe6d4;
+  --ok: #1f8a5b;
+  --gate: #b23a48;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141c; --surface: #171e29; --ink: #e6ebf2; --muted: #95a2b4; --line: #2a3443;
+    --accent: #7d9cff; --accent-soft: #1f2a46; --heat: #f2964f; --heat-soft: #3a2615;
+    --ok: #4cc28c; --gate: #f07a87; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141c; --surface: #171e29; --ink: #e6ebf2; --muted: #95a2b4; --line: #2a3443;
+  --accent: #7d9cff; --accent-soft: #1f2a46; --heat: #f2964f; --heat-soft: #3a2615;
+  --ok: #4cc28c; --gate: #f07a87; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+}
+.wrap {
+  max-width: 1080px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+  display: grid; gap: 32px;
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.35rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 700; }
+p { margin: 0; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.lede { max-width: 62ch; color: var(--muted); font-size: 1.05rem; }
+header { display: grid; gap: 12px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Source monitor */
+.monitor {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 20px; display: grid; gap: 14px;
+}
+.monitor-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; justify-content: space-between; }
+.src-title { font-weight: 700; }
+.tag {
+  font-family: var(--font-mono); font-size: 0.7rem; padding: 2px 8px; border-radius: 99px;
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
+.timeline-box { overflow-x: auto; }
+svg.timeline { display: block; width: 100%; min-width: 560px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.82rem; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button {
+  font: inherit; font-size: 0.92rem; cursor: pointer; border-radius: 8px;
+  padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 700; }
+.status { font-size: 0.85rem; color: var(--muted); }
+
+/* Stage rail */
+ol.rail {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px;
+}
+@media (max-width: 860px) { ol.rail { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 440px) { ol.rail { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rail button {
+  width: 100%; height: 100%; text-align: left; display: grid; gap: 4px; align-content: start;
+  padding: 10px 10px 12px; position: relative;
+}
+.rail .num { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.rail .name { font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
+.rail .who { font-size: 0.75rem; color: var(--muted); }
+.rail button.done .num::after { content: " ✓"; color: var(--ok); }
+.rail button.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 3px 0 var(--accent); }
+.rail button.gate { border-style: dashed; border-color: var(--gate); }
+.rail button.gate .who { color: var(--gate); }
+
+/* Detail */
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; }
+@media (max-width: 760px) { .detail { grid-template-columns: 1fr; } }
+.detail-text { display: grid; gap: 14px; align-content: start; }
+dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 0.92rem; }
+dl.facts dt { color: var(--muted); }
+dl.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.file {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  display: flex; flex-direction: column; min-width: 0;
+}
+.file-bar {
+  display: flex; justify-content: space-between; gap: 10px; padding: 8px 14px;
+  border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted);
+}
+.file pre {
+  margin: 0; padding: 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem;
+  line-height: 1.6; white-space: pre; color: var(--ink);
+}
+.gate-note {
+  border: 1px dashed var(--gate); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem;
+}
+.gate-note strong { color: var(--gate); }
+
+/* Phases */
+.phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .phases { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .phases { grid-template-columns: 1fr; } }
+.phase { border-top: 3px solid var(--line); padding-top: 10px; display: grid; gap: 6px; align-content: start; }
+.phase.now { border-top-color: var(--accent); }
+.phase p { font-size: 0.9rem; color: var(--muted); }
+.phase .stages { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
+footer { font-size: 0.82rem; color: var(--muted); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .clip-rect, .heat-path, .word-ticks { transition: opacity .35s ease; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">poly_nomial_clips · automation</div>
+    <h1>From one YouTube link to posted Shorts</h1>
+    <p class="lede">You give the pipeline a URL. Eight stages turn it into captioned 9:16 clips for YouTube Shorts, Instagram Reels and TikTok. Every stage writes a file into the repo, and nothing is published until you approve it.</p>
+  </header>
+
+  <section class="monitor" aria-label="Source video timeline">
+    <div class="monitor-head">
+      <div>
+        <div class="eyebrow">Example source (made up for this demo)</div>
+        <div class="src-title">"What actually happens at a black hole's event horizon?"</div>
+      </div>
+      <span class="tag mono">18:42 · 1920×1080 · 30 fps</span>
+    </div>
+    <div class="timeline-box">
+      <svg class="timeline" id="timeline" viewBox="0 0 1000 170" role="img" aria-label="Timeline with replay heat, transcript density and chosen clips"></svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--heat)"></i>Most-replayed heat (from yt-dlp)</span>
+      <span><i class="sw" style="background:var(--muted)"></i>Speech density (from the transcript)</span>
+      <span><i class="sw" style="background:var(--accent)"></i>Clips Claude picked</span>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px" aria-label="Pipeline stages">
+    <div class="controls">
+      <button class="primary" id="run">Run the demo</button>
+      <button id="prev">Back</button>
+      <button id="next">Next stage</button>
+      <span class="status" id="status" aria-live="polite"></span>
+    </div>
+    <ol class="rail" id="rail"></ol>
+  </section>
+
+  <section class="detail" id="detail" aria-live="polite"></section>
+
+  <section style="display:grid;gap:14px">
+    <h2>Build order</h2>
+    <div class="phases">
+      <div class="phase now"><div class="phase-label eyebrow">Phase 1 · start here</div><h3>Find the moments</h3><div class="stages">stages 1–3</div><p>URL in, ranked <code>highlights.md</code> out. Cheap to run, and it tests the hardest judgement call first.</p></div>
+      <div class="phase"><div class="eyebrow">Phase 2</div><h3>Cut automatically</h3><div class="stages">stages 4–5</div><p>ffmpeg cuts, face-tracked 9:16 framing and burned-in captions land in <code>renders/</code>.</p></div>
+      <div class="phase"><div class="eyebrow">Phase 3</div><h3>Brand and publish</h3><div class="stages">stages 5–7</div><p>A Remotion template for the channel look, then upload to all three platforms after you approve.</p></div>
+      <div class="phase"><div class="eyebrow">Phase 4</div><h3>Run on its own</h3><div class="stages">stage 8 + watcher</div><p>Watch favourite channels for new uploads, and feed performance back into the playbooks.</p></div>
+    </div>
+  </section>
+
+  <footer>Source video, transcript lines and scores on this page are examples, not real data. Media files stay out of git; only the Markdown records are committed.</footer>
+</div>
+
+<script>
+(function () {
+  var DUR = 18 * 60 + 42; // seconds
+  var W = 1000, X0 = 20, X1 = 980;
+  function x(t) { return X0 + (t / DUR) * (X1 - X0); }
+  function tc(t) { var m = Math.floor(t / 60), s = Math.round(t % 60); return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0"); }
+
+  var clips = [
+    { id: "A", start: 134, end: 172, score: 9.1, hook: "Time stops at the horizon. Except it doesn't." },
+    { id: "B", start: 460, end: 511, score: 8.4, hook: "Spaghettification, explained with a rubber band" },
+    { id: "C", start: 785, end: 821, score: 7.8, hook: "Why you'd never notice falling in" }
+  ];
+
+  // Replay heat: a smooth baseline plus peaks over the chosen clips.
+  var peaks = [[150, 0.85, 28], [485, 0.7, 34], [800, 0.62, 26], [40, 0.35, 40], [1010, 0.3, 50]];
+  function heat(t) {
+    var v = 0.12 + 0.04 * Math.sin(t / 47);
+    peaks.forEach(function (p) { v += p[1] * Math.exp(-Math.pow(t - p[0], 2) / (2 * p[2] * p[2])); });
+    return Math.min(v, 1);
+  }
+
+  var svg = document.getElementById("timeline");
+  var NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, parent) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(n);
+    return n;
+  }
+
+  // Track background + ruler
+  el("rect", { x: X0, y: 10, width: X1 - X0, height: 120, rx: 6, fill: "var(--bg)", stroke: "var(--line)" });
+  for (var m = 0; m <= 18; m += 3) {
+    var gx = x(m * 60);
+    el("line", { x1: gx, x2: gx, y1: 130, y2: 136, stroke: "var(--muted)" });
+    var lbl = el("text", { x: gx, y: 152, "text-anchor": m === 0 ? "start" : "middle", fill: "var(--muted)", "font-size": 12, "font-family": "JetBrains Mono, monospace" });
+    lbl.textContent = tc(m * 60);
+  }
+  var endLbl = el("text", { x: X1, y: 152, "text-anchor": "end", fill: "var(--muted)", "font-size": 12, "font-family": "JetBrains Mono, monospace" });
+  endLbl.textContent = tc(DUR);
+
+  // Heat path (layer 1)
+  var d = "M" + X0 + " 130";
+  for (var t = 0; t <= DUR; t += 4) d += " L" + x(t).toFixed(1) + " " + (130 - heat(t) * 70).toFixed(1);
+  d += " L" + X1 + " 130 Z";
+  var heatG = el("g", { class: "heat-path" });
+  el("path", { d: d, fill: "var(--heat-soft)", stroke: "var(--heat)", "stroke-width": 1.5 }, heatG);
+
+  // Speech density ticks (layer 2): deterministic pseudo-random
+  var ticks = el("g", { class: "word-ticks" });
+  var seed = 7;
+  function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+  for (var s = 0; s < DUR; s += 6) {
+    var h = 4 + rnd() * 14;
+    el("rect", { x: x(s), y: 20, width: 2.4, height: h, fill: "var(--muted)", opacity: 0.55 }, ticks);
+  }
+
+  // Clip ranges (layer 3)
+  var clipG = el("g", { class: "clip-rect" });
+  clips.forEach(function (c) {
+    el("rect", { x: x(c.start), y: 10, width: Math.max(x(c.end) - x(c.start), 6), height: 120, fill: "var(--accent)", opacity: 0.18 }, clipG);
+    el("rect", { x: x(c.start), y: 10, width: Math.max(x(c.end) - x(c.start), 6), height: 4, fill: "var(--accent)" }, clipG);
+    var tl = el("text", { x: x(c.start) + 4, y: 50, fill: "var(--accent)", "font-size": 13, "font-weight": 700, "font-family": "JetBrains Mono, monospace" }, clipG);
+    tl.textContent = c.id;
+  });
+
+  // Stage data
+  var stages = [
+    { name: "Download", who: "yt-dlp", tools: "<code>yt-dlp</code>",
+      what: "Downloads the video, its title and channel info, auto-captions, and the most-replayed heatmap. The heatmap shows exactly where viewers rewound, which is a strong hint before any AI runs.",
+      input: "A YouTube URL", output: "<code>raw/source.mp4</code> (ignored by git), <code>info.json</code>",
+      file: "clips/2026-11-11_example_event-horizon/source.md",
+      body: "# What actually happens at a black hole's event horizon?\n\n- url: https://www.youtube.com/watch?v=EXAMPLE\n- creator: (example channel)\n- published: 2026-11-04\n- length: 18:42\n- heatmap peaks: 02:30, 08:05, 13:20" },
+    { name: "Transcribe", who: "WhisperX", tools: "<code>whisperx</code> (or whisper-cpp)",
+      what: "Turns speech into text with a timestamp on every word. Word timing drives both the clip boundaries and the word-by-word captions later.",
+      input: "<code>raw/source.mp4</code>", output: "<code>transcript.md</code> + word-level JSON",
+      file: "clips/2026-11-11_example_event-horizon/transcript.md",
+      body: "[02:14.2] So here's the thing everyone gets wrong.\n[02:17.9] From far away, you'd see someone falling in\n[02:21.0] slow down... and freeze at the horizon.\n[02:25.6] But for them? Nothing special happens.\n[02:29.3] They sail straight through.\n..." },
+    { name: "Find highlights", who: "Claude", tools: "Claude API via a <code>/clip</code> skill",
+      what: "Claude reads the transcript alongside the heat curve and scene cuts, and ranks moments on four things: a hook in the first 3 seconds, makes sense on its own, has a payoff, and runs 20–60 seconds. It also drafts a hook line for each.",
+      input: "transcript + heatmap + scene cuts", output: "<code>highlights.md</code>, ranked",
+      file: "clips/2026-11-11_example_event-horizon/highlights.md",
+      body: null },
+    { name: "Cut & reframe", who: "ffmpeg + MediaPipe", tools: "<code>ffmpeg</code>, <code>mediapipe</code>, <code>scenedetect</code>",
+      what: "Cuts each clip on word boundaries, then crops 16:9 to 9:16 while a face tracker keeps the speaker centred. Screen recordings and diagrams fall back to a blurred-background fill.",
+      input: "<code>highlights.md</code> + source video", output: "<code>renders/A.mp4</code>, <code>B.mp4</code>, <code>C.mp4</code> (1080×1920)",
+      file: "renders/plan.txt",
+      body: "A  00:02:14.20 → 00:02:52.10  38s  crop=face-track\nB  00:07:40.00 → 00:08:31.40  51s  crop=face-track\nC  00:13:05.30 → 00:13:41.00  36s  crop=blur-fill (diagram)" },
+    { name: "Captions & brand", who: "ffmpeg / Remotion", tools: "ASS subtitles + <code>ffmpeg</code>, later <code>remotion</code>",
+      what: "Burns in word-by-word captions, a hook title card for the first 2 seconds, an on-screen creator credit and an outro. Remotion keeps every clip on the same template once the look is settled.",
+      input: "Raw cuts + word timings", output: "Finished clips in <code>exports/</code>",
+      file: "playbooks/editing-style.md (applied)",
+      body: "captions:  2-3 words per line, centre, 64px, white + dark outline\nhook card: 0.0–2.0s, top third\ncredit:    \"via @creator · full video linked\" bottom, whole clip\nmusic:     royalty-free bed at -24 LUFS under speech\noutro:     1.5s channel card" },
+    { name: "Review", who: "Claude + you", gate: true, tools: "Claude QA pass, then your approval",
+      what: "Claude checks each clip: it stands alone, its science claims match the source, the credit is visible, and it doesn't cut off mid-sentence. Then you approve or reject. This stays manual until the clip picks are consistently good.",
+      input: "Finished clips + captions", output: "Approve or reject per clip",
+      file: "clips/2026-11-11_example_event-horizon/review.md",
+      body: "A  ✓ stands alone   ✓ claim matches 02:25   ✓ credit   → APPROVE\nB  ✓ stands alone   ✓ claim matches 07:58   ✓ credit   → APPROVE\nC  ✗ opens mid-thought (\"...and that's why\")         → RECUT start to 13:03.8" },
+    { name: "Publish", who: "Platform APIs", tools: "YouTube Data API, Instagram Graph API, TikTok Content Posting API",
+      what: "Uploads approved clips with captions, hashtags and a link to the original video. A scheduler like Buffer or Metricool can replace the three integrations with one.",
+      input: "Approved clips", output: "Post links on each platform",
+      file: "clips/2026-11-11_example_event-horizon/posts.md",
+      body: "| clip | platform        | posted (AEDT)    | link |\n|------|-----------------|------------------|------|\n| A    | YouTube Shorts  | 2026-11-12 18:00 | …    |\n| A    | Instagram Reels | 2026-11-12 18:05 | …    |\n| A    | TikTok          | 2026-11-12 18:10 | …    |\n| B    | YouTube Shorts  | 2026-11-14 18:00 | …    |" },
+    { name: "Learn", who: "Claude", tools: "Platform analytics → <code>analytics/</code>",
+      what: "Pulls views, watch-through and shares after 48 hours, notes which hooks held attention, and updates the playbooks so the next highlight pass picks better.",
+      input: "Post performance", output: "Notes in <code>analytics/</code>, playbook edits",
+      file: "analytics/2026-11.md",
+      body: "- A held 71% to the end. Contradiction hooks (\"X. Except it doesn't.\") beat question hooks.\n- B dropped at 0:04, the rubber band appears too late. Move the visual to the first 2s.\n→ Updated playbooks/editing-style.md: show the visual before the explanation." }
+  ];
+
+  function highlightsBody() {
+    var out = "# Highlights (ranked)\n\n";
+    clips.forEach(function (c) {
+      out += "## " + c.id + "  " + tc(c.start) + "–" + tc(c.end) + "  (" + (c.end - c.start) + "s)  score " + c.score.toFixed(1) + "\n";
+      out += "hook: \"" + c.hook + "\"\n\n";
+    });
+    return out + "rejected: 10:12 (needs earlier context), 16:40 (sponsor read)";
+  }
+
+  var rail = document.getElementById("rail");
+  var detail = document.getElementById("detail");
+  var status = document.getElementById("status");
+  var current = 0, timer = null;
+
+  stages.forEach(function (s, i) {
+    var li = document.createElement("li");
+    var b = document.createElement("button");
+    b.type = "button"; b.id = "stage-" + (i + 1);
+    if (s.gate) b.classList.add("gate");
+    b.innerHTML = '<span class="num">' + String(i + 1).padStart(2, "0") + '</span><span class="name">' + s.name + '</span><span class="who">' + (s.gate ? "Approval gate · " : "") + s.who + "</span>";
+    b.addEventListener("click", function () { stop(); show(i); });
+    li.appendChild(b); rail.appendChild(li);
+  });
+
+  function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+  function show(i) {
+    current = i;
+    var s = stages[i];
+    Array.prototype.forEach.call(rail.querySelectorAll("button"), function (b, j) {
+      b.classList.toggle("active", j === i);
+      b.classList.toggle("done", j < i);
+      b.setAttribute("aria-current", j === i ? "step" : "false");
+    });
+    svg.querySelector(".heat-path").style.opacity = i >= 0 ? 1 : 0;
+    svg.querySelector(".word-ticks").style.opacity = i >= 1 ? 1 : 0;
+    svg.querySelector(".clip-rect").style.opacity = i >= 2 ? 1 : 0;
+
+    var body = s.body === null ? highlightsBody() : s.body;
+    detail.innerHTML =
+      '<div class="detail-text">' +
+        '<div class="eyebrow">Stage ' + (i + 1) + " of 8</div>" +
+        "<h2>" + s.name + "</h2>" +
+        "<p>" + s.what + "</p>" +
+        '<dl class="facts"><dt>Tools</dt><dd>' + s.tools + "</dd><dt>Takes</dt><dd>" + s.input + "</dd><dt>Produces</dt><dd>" + s.output + "</dd></dl>" +
+        (s.gate ? '<div class="gate-note"><strong>Nothing posts without you.</strong> The pipeline pauses here and waits for your approval.</div>' : "") +
+      "</div>" +
+      '<div class="file"><div class="file-bar"><span>' + esc(s.file) + "</span><span>example</span></div><pre>" + esc(body) + "</pre></div>";
+    status.textContent = "Showing stage " + (i + 1) + ": " + s.name;
+  }
+
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+    document.getElementById("run").textContent = "Run the demo";
+  }
+  document.getElementById("run").addEventListener("click", function () {
+    if (timer) { stop(); return; }
+    show(0);
+    this.textContent = "Pause";
+    timer = setInterval(function () {
+      if (current >= stages.length - 1) { stop(); status.textContent = "Done: 3 clips found, 2 approved, 1 sent back for a recut."; return; }
+      show(current + 1);
+    }, 2600);
+  });
+  document.getElementById("next").addEventListener("click", function () { stop(); show(Math.min(current + 1, stages.length - 1)); });
+  document.getElementById("prev").addEventListener("click", function () { stop(); show(Math.max(current - 1, 0)); });
+
+  show(2); // open on the highlight stage so the first view shows the picks
+})();
+</script>
