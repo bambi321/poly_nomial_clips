@@ -40,10 +40,20 @@ poly_nomial_clips/
 │
 ├── templates/                 # Blank versions of the files above to copy from
 │
+├── docs/                      # Diagrams and pages (e.g. the pipeline walkthrough)
+│
 └── analytics/                 # Notes on performance: what hooked, what flopped, lessons learned
 ```
 
 Folders get created as we need them, so not all of these exist yet.
+
+---
+
+## Automation pipeline
+
+**Interactive walkthrough:** [Clip Pipeline](https://claude.ai/artifact/9Gka2iJTwiBGYYFyRnyENW) (source: `docs/clip-pipeline.html`)
+
+YouTube URL → download (yt-dlp) → transcribe (WhisperX) → find highlights (Claude) → cut & reframe to 9:16 (ffmpeg + MediaPipe) → captions & branding (ffmpeg / Remotion) → **review & approve (you)** → publish (YouTube / Instagram / TikTok APIs) → learn from analytics.
 
 ---
 
