@@ -40,6 +40,10 @@ poly_nomial_clips/
 │
 ├── templates/                 # Blank versions of the files above to copy from
 │
+├── scripts/                   # Pipeline scripts (e.g. ingest.py: download + transcribe)
+├── media/                     # Local video and word timings, never committed
+├── requirements.txt           # Python packages for the pipeline
+│
 ├── docs/                      # Diagrams and pages (e.g. the pipeline walkthrough)
 │
 └── analytics/                 # Notes on performance: what hooked, what flopped, lessons learned
@@ -54,6 +58,26 @@ Folders get created as we need them, so not all of these exist yet.
 **Interactive walkthrough:** [Clip Pipeline](https://claude.ai/artifact/9Gka2iJTwiBGYYFyRnyENW) (source: `docs/clip-pipeline.html`)
 
 YouTube URL → download (yt-dlp) → transcribe (WhisperX) → find highlights (Claude) → cut & reframe to 9:16 (ffmpeg + MediaPipe) → captions & branding (ffmpeg / Remotion) → **review & approve (you)** → publish (YouTube / Instagram / TikTok APIs) → learn from analytics.
+
+### Using `/clip`
+
+In Claude Code, from this repo:
+
+```
+/clip https://www.youtube.com/watch?v=<id>
+```
+
+This downloads the video, transcribes it with word timings, reads YouTube's most-replayed heatmap, and has Claude write ranked picks to `clips/<folder>/highlights.md`. It runs on your Claude subscription, so no API key is needed. Automatic cutting (Phase 2) is next.
+
+### One-time setup
+
+```
+brew install yt-dlp deno uv ffmpeg-full
+uv python install 3.12
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
 
 ---
 
