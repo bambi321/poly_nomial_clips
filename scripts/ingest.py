@@ -5,18 +5,17 @@ and write the files Claude reads to pick highlights.
 Usage:
     .venv/bin/python scripts/ingest.py <youtube-url> [--model small] [--language en] [--force]
 
-Writes (committed to git):
-    clips/<YYYY-MM-DD>_<creator>_<video-slug>/source.md      video details, chapters, description
-    clips/<YYYY-MM-DD>_<creator>_<video-slug>/transcript.md  sentence-level transcript with replay heat
+Everything for one video goes in episodes/<YYYY-MM-DD>_<creator>_<video-slug>/:
 
-Writes (local only, ignored by git):
-    media/<same-name>/source.mp4    the video
-    media/<same-name>/info.json     full yt-dlp metadata
-    media/<same-name>/words.json    word-level timings (used later for captions)
-    media/<same-name>/scenes.json   scene cut times in seconds
+    source.md            video details, chapters, description       (committed)
+    transcript.md        sentence-level transcript with replay heat  (committed)
+    media/source.mp4     the video                                   (ignored by git)
+    media/info.json      full yt-dlp metadata                        (ignored by git)
+    media/words.json     word-level timings, used later for captions (ignored by git)
+    media/scenes.json    scene cut times in seconds                  (ignored by git)
 
 Re-running is safe: finished steps are skipped unless --force is passed.
-The last line on stdout is `CLIP_DIR=<path>` so callers can find the output.
+The last line on stdout is `EPISODE_DIR=<path>` so callers can find the output.
 """
 
 import argparse
@@ -74,7 +73,7 @@ def fetch_info(url):
 def download(url, dest):
     cmd = ["yt-dlp", "--no-playlist", "-f", VIDEO_FORMAT,
            "--merge-output-format", "mp4", "-o", str(dest), url]
-    # Send yt-dlp's progress to stderr so stdout stays clean for CLIP_DIR=
+    # Send yt-dlp's progress to stderr so stdout stays clean for EPISODE_DIR=
     result = subprocess.run(cmd, stdout=sys.stderr)
     if result.returncode != 0 or not dest.exists():
         sys.exit("Video download failed (see yt-dlp output above).")
@@ -239,9 +238,8 @@ def main():
     name = (f"{upload[:4]}-{upload[4:6]}-{upload[6:]}_"
             f"{slugify(info.get('channel') or info.get('uploader'), 24)}_"
             f"{slugify(info.get('title'), 48)}")
-    clip_dir = ROOT / "clips" / name
-    media_dir = ROOT / "media" / name
-    clip_dir.mkdir(parents=True, exist_ok=True)
+    episode_dir = ROOT / "episodes" / name
+    media_dir = episode_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
     (media_dir / "info.json").write_text(json.dumps(info))
     log(f"{info.get('title')} · {tc(info.get('duration') or 0, False)} · {info.get('channel')}")
@@ -271,12 +269,12 @@ def main():
         scenes = json.loads(scenes_path.read_text())
 
     heatmap = info.get("heatmap") or []
-    write_source_md(clip_dir / "source.md", info, media_dir)
-    write_transcript_md(clip_dir / "transcript.md", info, transcript, heatmap, scenes)
+    write_source_md(episode_dir / "source.md", info, media_dir)
+    write_transcript_md(episode_dir / "transcript.md", info, transcript, heatmap, scenes)
 
     log(f"Done: {len(transcript['segments'])} sentences, {len(scenes)} scene cuts, "
         f"{'heatmap found' if heatmap else 'no heatmap'}.")
-    print(f"CLIP_DIR={clip_dir.relative_to(ROOT)}")
+    print(f"EPISODE_DIR={episode_dir.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

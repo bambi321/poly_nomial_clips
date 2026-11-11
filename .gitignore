@@ -61,6 +61,15 @@ Proxies/
 *.pek
 
 # ─────────────────────────────────────────────
+# Episodes: commit the .md notes, keep each episode's video and data local
+#   episodes/<name>/media/    downloaded video, metadata, word timings
+#   episodes/<name>/renders/  finished vertical clips
+# (the media/ and renders/ rules below cover these at any depth)
+# ─────────────────────────────────────────────
+episodes/*/media/
+episodes/*/renders/
+
+# ─────────────────────────────────────────────
 # Working folders for downloads and renders
 # ─────────────────────────────────────────────
 downloads/
