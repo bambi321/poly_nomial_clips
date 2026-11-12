@@ -1,13 +1,15 @@
 ---
 name: render
-description: Cut the picks in a video's highlights.md into finished, numbered 9:16 clips (clip1.mp4, clip2.mp4…) with word-by-word captions and no other on-screen text, write each clip's post caption, then check them. Use when the user runs /render, or asks to cut, render or export the clips for a video.
+description: Cut the picks in a video's highlights.md into finished, numbered 9:16 clips (clip1.mp4, clip2.mp4…) with word-by-word captions and no other on-screen text, write each clip's post caption, then check them. /clip runs this automatically; use /render on its own to re-render or fix clips, or after /clip --review. Use when the user runs /render, or asks to cut, render or export the clips for a video.
 argument-hint: [video-folder] [--clips 1,3]
-allowed-tools: Bash(.venv/bin/python scripts/render.py:*), Bash(.venv/bin/python scripts/ingest.py:*), Bash(ls:*), Read, Write, Edit, Glob
+allowed-tools: Bash(.venv/bin/python scripts/render.py:*), Bash(.venv/bin/python scripts/ingest.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Bash(ls:*), Read, Write, Edit, Glob
 ---
 
 # /render
 
 Arguments: $ARGUMENTS
+
+`/clip <url>` already runs sections 2–5 of this file as part of its one-sweep pipeline. Run `/render` on its own to redo or fix clips, or after `/clip --review`.
 
 ## 1. Pick the video
 
@@ -89,6 +91,12 @@ When the user says the clips are good:
 
    This removes `media/` (the source video, word timings, contact sheet and manifest) and anything in `clips/` that isn't a clip or caption. The video folder keeps `source.md`, `transcript.md`, `highlights.md`, `caption-fixes.txt` and `clips/`.
 
-2. Add the clips to `release-schedule.md`, one per day after the last scheduled date, in clip order, with status `not-posted`. Follow the existing table format, including the File and Caption links.
+2. Queue any clips that aren't scheduled yet (it skips ones that are, and puts new ones on the next free 10:00/17:00 slots):
+
+   ```
+   .venv/bin/python scripts/schedule.py add <video> [--clips 1,3]
+   ```
+
+   Never edit `release-schedule.md` by hand. A re-rendered clip that's already queued just replaces its file in place, so it needs no schedule change.
 
 Don't clean up before the user approves. Re-rendering after cleanup means downloading and transcribing the video again.

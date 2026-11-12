@@ -1,10 +1,11 @@
 #!/bin/bash
-# Manage the daily 10am Instagram post job (a macOS LaunchAgent).
+# Manage the Instagram post job (a macOS LaunchAgent) that runs at each daily slot.
+# The slot times (10:00 and 17:00, the Mac's local time) come from SLOTS in scripts/schedule.py.
 #
-#   scripts/scheduler.sh install      turn on: post the due clip every day at 10:00
+#   scripts/scheduler.sh install      turn on (or update after changing SLOTS): post the due clip at each slot
 #   scripts/scheduler.sh uninstall    turn off (nothing else changes; install again to resume)
 #   scripts/scheduler.sh status       is it on, when did it last run, what's next
-#   scripts/scheduler.sh run-now      run the real 10am job immediately (posts if a clip is due)
+#   scripts/scheduler.sh run-now      run the real job immediately (posts if a clip is due)
 #   scripts/scheduler.sh test-alert   send test start, finish and failure texts from the job's context,
 #                                     so macOS asks for any permission while you're watching
 #
@@ -18,8 +19,7 @@ LABEL="com.polynomial.clips.post"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON="$REPO/.venv/bin/python"
 DOMAIN="gui/$(id -u)"
-HOUR=10
-MINUTE=0
+SLOTS="$("$PYTHON" "$REPO/scripts/schedule.py" slots)"   # e.g. "10:00 17:00"
 
 write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
   local path="$1" label="$2"; shift 2
@@ -28,10 +28,16 @@ write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
   local schedule=""
   if [ "$label" = "$LABEL" ]; then
     schedule="  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key><integer>$HOUR</integer>
-    <key>Minute</key><integer>$MINUTE</integer>
-  </dict>"
+  <array>"
+    for slot in $SLOTS; do
+      schedule+="
+    <dict>
+      <key>Hour</key><integer>$((10#${slot%%:*}))</integer>
+      <key>Minute</key><integer>$((10#${slot##*:}))</integer>
+    </dict>"
+    done
+    schedule+="
+  </array>"
   fi
   mkdir -p "$(dirname "$path")" "$REPO/logs"
   cat > "$path" <<EOF
@@ -66,7 +72,7 @@ case "${1:-status}" in
     write_plist "$PLIST" "$LABEL"
     is_loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST"
-    echo "Scheduler on: posts the due clip every day at $(printf '%02d:%02d' $HOUR $MINUTE)."
+    echo "Scheduler on: posts the due clip every day at ${SLOTS// / and }."
     ;;
   uninstall)
     is_loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" || true
@@ -75,7 +81,7 @@ case "${1:-status}" in
     ;;
   status)
     if is_loaded "$LABEL"; then
-      echo "Scheduler: ON (daily at $(printf '%02d:%02d' $HOUR $MINUTE))"
+      echo "Scheduler: ON (daily at ${SLOTS// / and })"
       launchctl print "$DOMAIN/$LABEL" | grep -E "last exit code|runs =" | sed 's/^[[:space:]]*/  /' || true
     else
       echo "Scheduler: OFF"

@@ -153,7 +153,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
   <header>
     <div class="eyebrow">poly_nomial_clips · automation</div>
     <h1>From one YouTube link to posted Shorts</h1>
-    <p class="lede">You give the pipeline a URL. Eight stages turn it into captioned 9:16 clips and post one to Instagram Reels every morning at 10:00. Every stage writes a file into the repo, and nothing is scheduled until you approve it. TikTok and YouTube Shorts come later.</p>
+    <p class="lede">You run <code>/clip &lt;url&gt;</code> once. In a single unattended sweep, the pipeline turns the video into captioned 9:16 clips, checks them and queues them. A scheduler then posts them to Instagram Reels at 10:00 and 17:00 every day. Every stage writes a file into the repo. Add <code>--review</code> to approve the picks yourself. TikTok and YouTube Shorts come later.</p>
   </header>
 
   <section class="monitor" aria-label="Source video timeline">
@@ -189,9 +189,9 @@ footer { font-size: 0.82rem; color: var(--muted); }
   <section style="display:grid;gap:14px">
     <h2>Build order</h2>
     <div class="phases">
-      <div class="phase done"><div class="phase-label eyebrow">Phase 1 · built</div><h3>Find the moments</h3><div class="stages">stages 1–3 · /clip</div><p>URL in, ranked <code>highlights.md</code> out, with replay heat, science checks and framing notes.</p></div>
-      <div class="phase done"><div class="eyebrow">Phase 2 · built</div><h3>Cut and caption</h3><div class="stages">stages 4–6 · /render</div><p>Numbered 9:16 clips with word-by-word captions, plus a post caption for each: insight, creator credit, 10 hashtags.</p></div>
-      <div class="phase done"><div class="eyebrow">Phase 3 · built</div><h3>Post to Instagram</h3><div class="stages">stage 7 · 10:00 daily</div><p>A macOS scheduler posts one clip a day. Instagram downloads it from a temporary Cloudflare tunnel link. First post 12 Nov 2026.</p></div>
+      <div class="phase done"><div class="phase-label eyebrow">Phase 1 · built</div><h3>Find the moments</h3><div class="stages">stages 1–3 · /clip</div><p>URL in, ranked <code>highlights.md</code> out, with replay heat, science checks and framing notes. Only clips scoring 7/10+ go forward.</p></div>
+      <div class="phase done"><div class="eyebrow">Phase 2 · built</div><h3>Cut and caption</h3><div class="stages">stages 4–6 · run by /clip</div><p>Numbered 9:16 clips with word-by-word captions, plus a post caption for each: insight, creator credit, 10 hashtags. Self-checked, then queued at the next free slots.</p></div>
+      <div class="phase done"><div class="eyebrow">Phase 3 · built</div><h3>Post to Instagram</h3><div class="stages">stage 7 · 10:00 &amp; 17:00</div><p>A macOS scheduler posts twice a day, in queue order. Instagram downloads each clip from a temporary Cloudflare tunnel link. First post 12 Nov 2026.</p></div>
       <div class="phase now"><div class="eyebrow">Phase 4 · next</div><h3>Grow it</h3><div class="stages">TikTok, Shorts, stage 8</div><p>Add TikTok and YouTube Shorts, watch favourite channels for new uploads, and feed performance back into the playbooks.</p></div>
     </div>
   </section>
@@ -277,7 +277,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
       input: "<code>media/source.mp4</code>", output: "<code>transcript.md</code> + word-level JSON",
       file: "videos/example-channel_event-horizon/transcript.md",
       body: "[02:14.2] So here's the thing everyone gets wrong.\n[02:17.9] From far away, you'd see someone falling in\n[02:21.0] slow down... and freeze at the horizon.\n[02:25.6] But for them? Nothing special happens.\n[02:29.3] They sail straight through.\n..." },
-    { name: "Find highlights", who: "Claude", tools: "Claude API via a <code>/clip</code> skill",
+    { name: "Find highlights", who: "Claude", tools: "Claude Code <code>/clip</code> skill (your Claude subscription)",
       what: "Claude reads the transcript alongside the heat curve and scene cuts, and ranks moments on four things: a hook in the first 3 seconds, makes sense on its own, has a payoff, and runs 20–60 seconds. It also drafts a hook line for each.",
       input: "transcript + heatmap + scene cuts", output: "<code>highlights.md</code>, ranked",
       file: "videos/example-channel_event-horizon/highlights.md",
@@ -292,13 +292,13 @@ footer { font-size: 0.82rem; color: var(--muted); }
       input: "Raw cuts + word timings", output: "<code>clipN.mp4</code> + <code>clipN-caption.txt</code> in the video's <code>clips/</code> folder",
       file: "videos/example-channel_event-horizon/clips/clip1-caption.txt",
       body: "Time doesn't really stop at a black hole's edge. From far away, someone falling in seems to freeze, but they sail straight through. It's a trick of light, not of time.\n\nFull credits for the original video go to @examplechannel\n\n#science #space #blackholes #physics #relativity #astronomy #universe #examplechannel #sciencefacts #didyouknow" },
-    { name: "Review", who: "Claude + you", gate: true, tools: "Claude QA pass, then your approval",
-      what: "Claude checks each clip: it stands alone, its science claims match the source, the caption credits the creator, and it doesn't cut off mid-sentence. Then you approve or reject. This stays manual until the clip picks are consistently good.",
-      input: "Finished clips + captions", output: "Approve or reject per clip",
-      file: "videos/example-channel_event-horizon/review.md",
-      body: "A  ✓ stands alone   ✓ claim matches 02:25   ✓ caption credit → APPROVE\nB  ✓ stands alone   ✓ claim matches 07:58   ✓ caption credit → APPROVE\nC  ✗ opens mid-thought (\"...and that's why\")         → RECUT start to 13:03.8" },
-    { name: "Publish", who: "Scheduler, 10:00", tools: "macOS launchd → <code>post_instagram.py</code> → Cloudflare quick tunnel → Instagram Graph API (<code>video_url</code>)",
-      what: "Each morning at 10:00 the scheduler takes the next clip from release-schedule.md, shares it for 2–3 minutes at a random Cloudflare tunnel link (only that one file is reachable), and Instagram downloads it from there. Once processed, it's published as a Reel with its caption, the tunnel closes, and you get a text.",
+    { name: "Check & queue", who: "Claude", tools: "Claude QA pass → <code>scripts/schedule.py add</code>",
+      what: "Claude checks each clip from the contact sheet and manifest: it starts and ends on a full sentence, the captions are spelled right, nothing extra is on screen, and the post caption follows the rules. Problems get one fix and re-render, and a clip that still fails is left out. The good clips are queued at the next free 10:00/17:00 slots, the working files are deleted, and you get a notification. No approval step unless you ran /clip --review.",
+      input: "Finished clips + captions", output: "Rows in <code>release-schedule.md</code>, a 🎬 notification",
+      file: "release-schedule.md",
+      body: "queued clip1 for Mon 16 Nov 10:00: Time stops at the horizon. Except it doesn't.\nqueued clip2 for Mon 16 Nov 17:00: Spaghettification, explained with a rubber band\nskipped clip3: opens mid-thought after re-render (left out of the queue)" },
+    { name: "Publish", who: "Scheduler, 10:00 & 17:00", tools: "macOS launchd → <code>post_instagram.py</code> → Cloudflare quick tunnel → Instagram Graph API (<code>video_url</code>)",
+      what: "At 10:00 and 17:00 every day, the scheduler takes the next due clip from release-schedule.md, shares it for 2–3 minutes at a random Cloudflare tunnel link (only that one file is reachable), and Instagram downloads it from there. Once processed, it's published as a Reel with its caption, the tunnel closes, and you get a text.",
       input: "release-schedule.md + clipN.mp4 + clipN-caption.txt", output: "Live Reel, clip marked posted, link logged",
       file: "logs/post.log",
       body: "10:00:05  job started\n10:00:11  tunnel open: https://<random>.trycloudflare.com/<random>.mp4\n10:01:41  tunnel verified: file downloads correctly\n10:01:44  Instagram is downloading and processing the clip\n10:02:30  tunnel closed and temporary copy deleted\n10:02:43  posted clip1: https://www.instagram.com/reel/…\n10:02:43  job finished" },
@@ -369,7 +369,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
     show(0);
     this.textContent = "Pause";
     timer = setInterval(function () {
-      if (current >= stages.length - 1) { stop(); status.textContent = "Done: 3 clips found, 2 approved, 1 sent back for a recut."; return; }
+      if (current >= stages.length - 1) { stop(); status.textContent = "Done: 3 clips found, 2 queued, 1 left out after its recheck."; return; }
       show(current + 1);
     }, 2600);
   });

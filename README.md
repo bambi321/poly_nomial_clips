@@ -45,9 +45,9 @@ poly_nomial_clips/
 │
 ├── templates/                 # Blank versions of the files above to copy from
 │
-├── scripts/                   # ingest.py, render.py, post_instagram.py, tunnel.py, scheduler.sh
+├── scripts/                   # ingest.py, render.py, schedule.py, post_instagram.py, tunnel.py, scheduler.sh
 ├── requirements.txt           # Python packages for the pipeline
-├── release-schedule.md        # Which clip posts on which day, and whether it's posted
+├── release-schedule.md        # Which clip posts in which slot (10:00 / 17:00), and whether it's posted
 ├── logs/                      # Posting job logs (not in git)
 │
 ├── docs/                      # Diagrams and pages (e.g. the pipeline walkthrough)
@@ -64,17 +64,19 @@ Folders get created as we need them, so not all of these exist yet.
 **Interactive walkthrough:** [Clip Pipeline](https://claude.ai/artifact/9Gka2iJTwiBGYYFyRnyENW) (source: `docs/clip-pipeline.html`)
 
 ```
-/clip <url>   YouTube URL → download (yt-dlp) → transcribe (WhisperX) → highlights.md (Claude)
-/render       cut + 9:16 framing + word-by-word captions (ffmpeg, MediaPipe) → clipN.mp4 + clipN-caption.txt
-              → review & approve (you) → added to release-schedule.md
-10:00 daily   scheduler (launchd) → Cloudflare quick tunnel → Instagram downloads the clip → Reel published
+/clip <url>      one unattended sweep:
+                 download (yt-dlp) → transcribe (WhisperX) → highlights.md (Claude)
+                 → cut + 9:16 framing + word-by-word captions (ffmpeg, MediaPipe) → clipN.mp4 + clipN-caption.txt
+                 → self-check → queue at the next free slots in release-schedule.md → clean up → notify you
+10:00 & 17:00    scheduler (launchd) → Cloudflare quick tunnel → Instagram downloads the clip → Reel published
 ```
 
 | Stage | Status |
 |---|---|
 | Find highlights (`/clip`) | ✅ built |
-| Cut, caption and write post captions (`/render`) | ✅ built |
-| Daily posting to Instagram (scheduler + tunnel) | ✅ built, first post 12 Nov 2026 |
+| Cut, caption and write post captions (`/render`, also run by `/clip`) | ✅ built |
+| One-sweep `/clip`: link in, clips queued | ✅ built |
+| Posting to Instagram twice daily (scheduler + tunnel) | ✅ built, first post 12 Nov 2026 |
 | TikTok and YouTube Shorts | not started |
 | Performance tracking (`analytics/`) | not started |
 
@@ -86,7 +88,17 @@ In Claude Code, from this repo:
 /clip https://www.youtube.com/watch?v=<id>
 ```
 
-This downloads the video, transcribes it with word timings, reads YouTube's most-replayed heatmap, and has Claude write ranked picks to `videos/<folder>/highlights.md`. The downloaded video and word timings go in `videos/<folder>/media/` while you work, and are deleted once the clips are approved. It runs on your Claude subscription, so no API key is needed.
+That's the whole job. One sweep with no questions, about 10–20 minutes:
+
+1. Downloads the video, transcribes it with word timings and reads YouTube's most-replayed heatmap.
+2. Claude picks the highlights (only clips scoring 7/10 or more) and writes them to `videos/<folder>/highlights.md`.
+3. Renders each clip and writes its post caption (the `/render` steps below), then checks the contact sheet, cut points and captions. Fixes are re-rendered once, and any clip that still has a problem is left out of the queue.
+4. Queues the good clips at the next free 10:00/17:00 slots after the last scheduled clip (`scripts/schedule.py add`), and sends you a notification with the dates.
+5. Deletes the working files (`media/`) and reports what it queued.
+
+Add `--review` to stop after step 2 and approve the picks yourself, then run `/render`. It runs on your Claude subscription, so no API key is needed.
+
+To leave it running unattended, start Claude with fewer prompts (for example in auto mode). The skill pre-approves the scripts it runs. Also add the [permissions below](#permissions-for-unattended-runs) so its file edits don't stop at a prompt.
 
 ### Using `/render`
 
@@ -95,16 +107,16 @@ This downloads the video, transcribes it with word timings, reads YouTube's most
 /render videos/<folder> --clips 1,3
 ```
 
-This turns each pick in `highlights.md` into a finished 1080×1920 clip, `videos/<folder>/clips/clip1.mp4`, `clip2.mp4` and so on, numbered in score order. Next to each clip it writes `clipN-caption.txt`, the post caption: a short insight, the verbatim creator credit and 10 hashtags (rules in `playbooks/captions.md`). Each clip is just the footage plus word-by-word captions with the current word highlighted. There's no hook title, credit or other text on screen; credits go in the post caption. Animated or diagram clips use blur-fill framing, and `speaker` clips are cropped around the face. Claude first writes any misheard words to `caption-fixes.txt` (`wrong => right`), then checks the result. Once you approve the clips, it deletes the video's working files and adds the clips to `release-schedule.md`.
+This turns each pick in `highlights.md` into a finished 1080×1920 clip, `videos/<folder>/clips/clip1.mp4`, `clip2.mp4` and so on, numbered in score order. Next to each clip it writes `clipN-caption.txt`, the post caption: a short insight, the verbatim creator credit and 10 hashtags (rules in `playbooks/captions.md`). Each clip is just the footage plus word-by-word captions with the current word highlighted. There's no hook title, credit or other text on screen; credits go in the post caption. Animated or diagram clips use blur-fill framing, and `speaker` clips are cropped around the face. Claude first writes any misheard words to `caption-fixes.txt` (`wrong => right`), then checks the result. Run on its own (to fix a clip, or after `/clip --review`), it asks you to approve. Then it deletes the working files and queues any clips not yet scheduled. A re-rendered clip that's already queued keeps its slot.
 
-### Daily posting to Instagram (10am)
+### Posting to Instagram (10am and 5pm)
 
-A background job on this Mac posts one clip a day at **10:00**: the earliest `not-posted` clip in `release-schedule.md` that's dated today or earlier. It's published as a Reel with `clipN-caption.txt` as the caption, then marked `posted`, with the link logged in the video's `posts.md` and `logs/post.log`. No Claude session or terminal needs to be open.
+A background job on this Mac posts at **10:00 and 17:00** every day, Melbourne/Sydney time (the Mac's clock). Each run posts the earliest `not-posted` clip in `release-schedule.md` whose slot has passed. It's published as a Reel with `clipN-caption.txt` as the caption, then marked `posted`, with the link logged in the video's `posts.md` and `logs/post.log`. No Claude session or terminal needs to be open.
 
 #### How a post works
 
 ```
-10:00  launchd starts scripts/post_instagram.py
+10:00 / 17:00  launchd starts scripts/post_instagram.py
          │
          ├─ picks the due clip from release-schedule.md, checks the video + caption files
          │
@@ -128,7 +140,7 @@ A background job on this Mac posts one clip a day at **10:00**: the earliest `no
 **Testing without posting:**
 
 ```
-.venv/bin/python scripts/post_instagram.py --dry-run [--as-of 2026-11-14]   # what would post, and the caption
+.venv/bin/python scripts/post_instagram.py --dry-run [--as-of "2026-11-14 17:00"]   # what would post, and the caption
 .venv/bin/python scripts/post_instagram.py --test-tunnel <clip.mp4>         # tunnel only; Instagram not contacted
 .venv/bin/python scripts/post_instagram.py --test-ig-download <clip.mp4>    # Instagram downloads + processes; NOT published
 ```
@@ -147,16 +159,45 @@ scripts/scheduler.sh test-alert   # send test texts; click Allow if macOS asks a
 
 In Claude, `/post` does the same: `status` (default), `dry-run`, `now`, `test-alert`, `pause`, `resume`.
 
+**The queue** (`scripts/schedule.py`). Use it instead of hand-editing `release-schedule.md`: it waits for a post that's running, so the two never edit the file at once.
+
+```
+.venv/bin/python scripts/schedule.py list                 # the queue, with the next slot marked
+.venv/bin/python scripts/schedule.py add videos/<folder>  # queue a video's clips at the next free slots
+.venv/bin/python scripts/schedule.py respace              # move all unposted clips onto consecutive slots from now
+```
+
+To change the posting times, edit `SLOTS` in `scripts/schedule.py`, then run `scripts/scheduler.sh install` and `schedule.py respace`.
+
 **`.env` needs:** `INSTAGRAM_ACCESS_TOKEN` (never-expiring system-user token from the Meta app), `INSTAGRAM_USER_ID` and `NOTIFY_IMESSAGE_TO`. Optional: `INSTAGRAM_UPLOAD_METHOD` (`tunnel`, the default, or `resumable`).
 
 **Also needs:** `cloudflared` (`brew install cloudflared`). It runs only during the job, not as a background service.
 
 **For it to keep running:**
-- The Mac is on, online and you're logged in around 10am. A locked screen is fine. If it's asleep, the post goes out when it wakes, and `sudo pmset repeat wakeorpoweron MTWRFSU 09:58:00` wakes it automatically.
+- The Mac is on, online and you're logged in at 10:00 and 17:00. A locked screen is fine. If it's asleep, the post goes out when it wakes. To wake it automatically, run `sudo pmset repeat wakeorpoweron MTWRFSU 09:58:00` (macOS allows only one repeating wake time, so 17:00 relies on the Mac being awake or woken).
 - The repo stays at this path.
 - The `.mp4` clips aren't deleted before they're posted. They only exist on this Mac.
 
-A missed day is caught up one clip per run, never two at once.
+Missed slots are caught up one clip per run, never two at once.
+
+### Permissions for unattended runs
+
+So `/clip` can write its files without asking, add this to `.claude/settings.json` (you add it yourself: Claude isn't allowed to change its own permissions):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python scripts/ingest.py:*)",
+      "Bash(.venv/bin/python scripts/render.py:*)",
+      "Bash(.venv/bin/python scripts/schedule.py:*)",
+      "Edit(./videos/**)",
+      "Edit(./knowledge/**)"
+    ],
+    "deny": ["Read(./.env)", "Edit(./.env)"]
+  }
+}
+```
 
 ### One-time setup
 
@@ -173,11 +214,9 @@ uv pip install -r requirements.txt
 ## Workflow at a glance
 
 1. **Pick a source.** A new or classic video from a creator in `knowledge/creators/`.
-2. **Log it.** `/clip <url>` creates `videos/creator_video-slug/` with `source.md` and `transcript.md`, and downloads the video into its `media/` folder.
-3. **Find highlights.** The same `/clip` run has Claude write ranked picks to `highlights.md`.
-4. **Edit.** `/render` cuts the clips into the video's `clips/` folder and writes each clip's caption. Media stays out of git.
-5. **Schedule and post.** Approved clips go into `release-schedule.md`, one a day. The 10am job posts each one to Instagram automatically, with its caption file.
-6. **Learn.** Add what worked (or didn't) to `analytics/` and update the playbooks.
+2. **Run `/clip <url>`.** One sweep creates `videos/creator_video-slug/` (`source.md`, `transcript.md`, `highlights.md`), renders the clips and their captions into `clips/`, checks them, and queues them in `release-schedule.md`. Media stays out of git.
+3. **Post.** The 10:00 and 17:00 job posts the queue to Instagram in order, with each clip's caption file. Queue a new video before the schedule runs out (two clips a day).
+4. **Learn.** Add what worked (or didn't) to `analytics/` and update the playbooks.
 
 ---
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Post the day's clip from release-schedule.md to Instagram as a Reel.
+"""Post the next due clip from release-schedule.md to Instagram as a Reel.
 
 Usage:
-    python scripts/post_instagram.py              post the clip that's due (used by the 10am job)
+    python scripts/post_instagram.py              post the clip that's due (used by the 10am and 5pm jobs)
     python scripts/post_instagram.py --dry-run    show what would post and check everything, without posting
-    python scripts/post_instagram.py --dry-run --as-of 2026-11-13   same, pretending it's that date
+    python scripts/post_instagram.py --dry-run --as-of "2026-11-14 17:00"   same, pretending it's then
     python scripts/post_instagram.py --status     show the schedule, what's next, and recent log lines
     python scripts/post_instagram.py --test-alert send test start, finish and failure texts
     python scripts/post_instagram.py --test-tunnel <video>       share via tunnel, check it downloads (no Instagram)
@@ -16,8 +16,9 @@ Upload method (INSTAGRAM_UPLOAD_METHOD in .env, default "tunnel"):
     resumable  push the file to Instagram's upload server
 
 How it picks a clip:
-    The earliest row in release-schedule.md that is `not-posted` and dated today or earlier.
-    At most one clip per run, so a missed day is caught up one clip at a time.
+    The earliest row in release-schedule.md that is `not-posted` and whose date and time have
+    passed. At most one clip per run, so missed slots are caught up one clip per run.
+    The slot times live in scripts/schedule.py (SLOTS).
 
 Phone texts (iMessage to NOTIFY_IMESSAGE_TO in .env, plus a Mac notification):
     ▶️ when the job starts, ⏹ when it finishes (with what it posted), ⚠️ if it fails.
@@ -44,15 +45,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
+from schedule import CREDIT_PREFIX, SCHEDULE, SLOTS, caption_problems, fmt, read_schedule
+
 ROOT = Path(__file__).resolve().parent.parent
-SCHEDULE = ROOT / "release-schedule.md"
 LOG_DIR = ROOT / "logs"
 LOG = LOG_DIR / "post.log"
 GRAPH = "https://graph.facebook.com/v23.0"
-CREDIT_PREFIX = "Full credits for the original video go to @"
 
 
 # ── Small helpers ────────────────────────────────────────────────────────────
@@ -265,27 +266,6 @@ def publish_reel(user_id, video, caption):
 
 # ── Schedule ─────────────────────────────────────────────────────────────────
 
-def md_link(cell):
-    m = re.search(r"\]\(([^)]+)\)", cell)
-    return m.group(1) if m else None
-
-
-def read_schedule():
-    rows = []
-    for i, line in enumerate(SCHEDULE.read_text().splitlines()):
-        if not re.match(r"^\|\s*\d{4}-\d{2}-\d{2}", line):
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 7:
-            continue
-        rows.append({
-            "line": i, "date": date.fromisoformat(cells[0][:10]), "date_label": cells[0],
-            "clip": cells[1], "title": cells[2], "creator": cells[3],
-            "video": md_link(cells[4]), "caption": md_link(cells[5]), "status": cells[6],
-        })
-    return rows
-
-
 def mark_posted(row):
     lines = SCHEDULE.read_text().splitlines()
     line = lines[row["line"]]
@@ -301,9 +281,9 @@ def record_post(row, link):
         f.write(f"| {datetime.now().strftime('%Y-%m-%d %H:%M')} | {row['clip']} | Instagram | {link} |\n")
 
 
-def due_row(rows, today):
-    pending = [r for r in rows if r["status"] == "not-posted" and r["date"] <= today]
-    return min(pending, key=lambda r: r["date"]) if pending else None
+def due_row(rows, now):
+    pending = [r for r in rows if r["status"] == "not-posted" and r["when"] <= now]
+    return min(pending, key=lambda r: r["when"]) if pending else None
 
 
 def check_files(row):
@@ -314,14 +294,10 @@ def check_files(row):
     if not row["caption"] or not caption_path.exists():
         raise ApiError(f"{row['clip']}: caption file is missing ({row['caption']})")
     caption = caption_path.read_text().strip()
-    if CREDIT_PREFIX not in caption:
-        raise ApiError(f"{row['clip']}: caption has no creator credit line, refusing to post")
-    if "youtube" in caption.lower():
-        # Instagram's API rejects any caption containing "YouTube" (ProcessingFailedError).
-        raise ApiError(f"{row['clip']}: caption mentions YouTube, which Instagram rejects. "
-                       f"Remove it (see playbooks/captions.md)")
-    if len(caption) > 2200:
-        raise ApiError(f"{row['clip']}: caption is {len(caption)} characters (Instagram max is 2200)")
+    problems = caption_problems(caption)
+    if problems:  # e.g. Instagram rejects any caption containing "YouTube" (ProcessingFailedError)
+        raise ApiError(f"{row['clip']}: caption {'; '.join(problems)}, refusing to post "
+                       f"(see playbooks/captions.md)")
     return video, caption
 
 
@@ -329,43 +305,45 @@ def check_files(row):
 
 def cmd_status():
     rows = read_schedule()
-    today = date.today()
-    print(f"Today: {today.isoformat()} ({today.strftime('%a')})\n")
+    now = datetime.now()
+    print(f"Now: {fmt(now)}. Posting slots: {', '.join(SLOTS)} daily.\n")
+    pending = [r for r in rows if r["status"] == "not-posted"]
+    upcoming = min((r["when"] for r in pending if r["when"] > now), default=None)
     for r in rows:
         flag = ""
-        if r["status"] == "not-posted" and r["date"] < today:
-            flag = "  ← overdue"
-        elif r["status"] == "not-posted" and r["date"] == today:
-            flag = "  ← due today at 10am"
-        print(f"  {r['date_label']:<17} {r['clip']:<7} {r['status']:<11} {r['title']}{flag}")
-    left = [r for r in rows if r["status"] == "not-posted"]
-    print(f"\n{len(left)} clip(s) left to post." + (" Schedule runs out after "
-          f"{max(r['date'] for r in left).isoformat()}." if left else " Nothing scheduled."))
+        if r["status"] == "not-posted" and r["when"] <= now:
+            flag = "  ← overdue (posts at the next run)"
+        elif r["when"] == upcoming:
+            flag = "  ← next"
+        print(f"  {fmt(r['when'])}  {r['clip']:<6} {r['status']:<11} {r['title']}{flag}")
+    print(f"\n{len(pending)} clip(s) left to post." + (" Queue runs out after "
+          f"{fmt(max(r['when'] for r in pending))}." if pending else " Nothing scheduled."))
     if LOG.exists():
         print("\nRecent log:")
         for line in LOG.read_text().splitlines()[-10:]:
             print("  " + line)
 
 
-def cmd_post(dry_run, today):
+def cmd_post(dry_run, now):
     if not TOKEN or not ENV.get("INSTAGRAM_USER_ID"):
         raise ApiError("INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_USER_ID missing from .env")
     user_id = ENV["INSTAGRAM_USER_ID"]
     rows = read_schedule()
-    row = due_row(rows, today)
+    row = due_row(rows, now)
     if not row:
         left = [r for r in rows if r["status"] == "not-posted"]
         if not left:
-            msg = "no clips left in release-schedule.md, nothing posted today. Add more with /clip and /render."
+            msg = "no clips left in release-schedule.md, nothing posted. Queue more with /clip <url>."
             log(msg)
             if not dry_run:
                 alert(msg)
             return None
-        msg = f"nothing due today (next: {left[0]['clip']} on {left[0]['date'].strftime('%a %d %b')})"
+        nxt = min(left, key=lambda r: r["when"])
+        msg = f"nothing due right now (next: {nxt['clip']} at {fmt(nxt['when'])})"
         log(msg)
         return msg
-    if row["date"] < today:
-        log(f"{row['clip']} was due {row['date'].isoformat()} and missed; posting it now")
+    if (now - row["when"]).total_seconds() > 30 * 60:
+        log(f"{row['clip']} was due {fmt(row['when'])} and missed; posting it now")
     video, caption = check_files(row)
     account = api("GET", user_id, fields="username")
     log(f"{'[dry run] would post' if dry_run else 'posting'} {row['clip']} "
@@ -387,7 +365,9 @@ def cmd_post(dry_run, today):
     mark_posted(row)
     record_post(row, link)
     log(f"posted {row['clip']}: {link}")
-    return f"posted {row['clip']} ({row['title']}): {link}"
+    left = sum(1 for r in read_schedule() if r["status"] == "not-posted")
+    low = " Queue a new video with /clip." if left <= 2 else ""
+    return f"posted {row['clip']} ({row['title']}): {link}. {left} clip(s) left.{low}"
 
 
 def main():
@@ -399,11 +379,16 @@ def main():
     group.add_argument("--test-tunnel", metavar="VIDEO", help="share a video through a tunnel and check it downloads (no Instagram)")
     group.add_argument("--test-ig-download", metavar="VIDEO",
                        help="have Instagram download and process a video via the tunnel, without publishing")
-    parser.add_argument("--as-of", help="with --dry-run: pretend today is this date (YYYY-MM-DD)")
+    parser.add_argument("--as-of", help='with --dry-run: pretend it is this time ("YYYY-MM-DD HH:MM", '
+                        'or a date for the end of that day)')
     args = parser.parse_args()
     if args.as_of and not args.dry_run:
         parser.error("--as-of only works with --dry-run")
-    today = date.fromisoformat(args.as_of) if args.as_of else date.today()
+    if args.as_of:
+        now = datetime.fromisoformat(args.as_of if " " in args.as_of or "T" in args.as_of
+                                     else args.as_of + " 23:59")
+    else:
+        now = datetime.now()
 
     if args.status:
         cmd_status()
@@ -434,9 +419,9 @@ def main():
             return
         if not args.dry_run:
             log("job started")
-            notify("▶️", "poly_nomial job started", "daily post job started.")
+            notify("▶️", "poly_nomial job started", "post job started.")
         try:
-            result = cmd_post(args.dry_run, today)
+            result = cmd_post(args.dry_run, now)
         except Exception as e:  # any failure: log it and alert, leave the clip not-posted
             msg = redact(f"{type(e).__name__ if not isinstance(e, ApiError) else ''} {e}".strip())
             log(f"FAILED: {msg}")
