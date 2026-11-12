@@ -63,7 +63,20 @@ Folders get created as we need them, so not all of these exist yet.
 
 **Interactive walkthrough:** [Clip Pipeline](https://claude.ai/artifact/9Gka2iJTwiBGYYFyRnyENW) (source: `docs/clip-pipeline.html`)
 
-YouTube URL → download (yt-dlp) → transcribe (WhisperX) → find highlights (Claude) → cut & reframe to 9:16 (ffmpeg + MediaPipe) → captions & branding (ffmpeg / Remotion) → **review & approve (you)** → publish (YouTube / Instagram / TikTok APIs) → learn from analytics.
+```
+/clip <url>   YouTube URL → download (yt-dlp) → transcribe (WhisperX) → highlights.md (Claude)
+/render       cut + 9:16 framing + word-by-word captions (ffmpeg, MediaPipe) → clipN.mp4 + clipN-caption.txt
+              → review & approve (you) → added to release-schedule.md
+10:00 daily   scheduler (launchd) → Cloudflare quick tunnel → Instagram downloads the clip → Reel published
+```
+
+| Stage | Status |
+|---|---|
+| Find highlights (`/clip`) | ✅ built |
+| Cut, caption and write post captions (`/render`) | ✅ built |
+| Daily posting to Instagram (scheduler + tunnel) | ✅ built, first post 12 Nov 2026 |
+| TikTok and YouTube Shorts | not started |
+| Performance tracking (`analytics/`) | not started |
 
 ### Using `/clip`
 
@@ -86,7 +99,41 @@ This turns each pick in `highlights.md` into a finished 1080×1920 clip, `videos
 
 ### Daily posting to Instagram (10am)
 
-A background job on this Mac posts one clip a day at **10:00**: the earliest `not-posted` clip in `release-schedule.md` that's dated today or earlier. It shares `clipN.mp4` for a few minutes at a temporary Cloudflare tunnel link, Instagram downloads it from there (`scripts/tunnel.py`), and it's published as a Reel with `clipN-caption.txt` as the caption. It then marks the clip `posted`, and logs the link in the video's `posts.md` and `logs/post.log`. No Claude session or terminal needs to be open.
+A background job on this Mac posts one clip a day at **10:00**: the earliest `not-posted` clip in `release-schedule.md` that's dated today or earlier. It's published as a Reel with `clipN-caption.txt` as the caption, then marked `posted`, with the link logged in the video's `posts.md` and `logs/post.log`. No Claude session or terminal needs to be open.
+
+#### How a post works
+
+```
+10:00  launchd starts scripts/post_instagram.py
+         │
+         ├─ picks the due clip from release-schedule.md, checks the video + caption files
+         │
+         ├─ scripts/tunnel.py
+         │    copies clipN.mp4 to an empty temp folder under a random name
+         │    serves ONLY that file on 127.0.0.1 (everything else → 404)
+         │    cloudflared opens a free quick tunnel → https://<random>.trycloudflare.com/<random>.mp4
+         │    downloads the file back through the tunnel and checks it matches (≈90s while DNS comes up)
+         │
+         ├─ Instagram Graph API (graph.facebook.com)
+         │    POST /{ig-user-id}/media   media_type=REELS, video_url=<tunnel link>, caption=…
+         │    Instagram downloads the clip from the tunnel; poll status until FINISHED (≈1 min)
+         │
+         ├─ tunnel closed, temp copy deleted (always, even on failure)
+         │
+         └─ POST /{ig-user-id}/media_publish → Reel is live → mark posted, log link, text ⏹
+```
+
+**Why a tunnel:** Instagram can take a video two ways. We could push the file to its upload server (`rupload.facebook.com`), but that rejected about half of our uploads, and every scheduled one, with an unexplained `ProcessingFailedError`. The other way is to give Instagram a link and let it download the file. That worked first time, so it's the default. The tunnel gives the clip a temporary public link without any cloud storage or account: it exists only for the 2–3 minutes of the job, the link is random, and nothing but that one file is reachable. Your Instagram token never goes through it. The push method is still available with `INSTAGRAM_UPLOAD_METHOD=resumable` in `.env`, but isn't recommended.
+
+**Testing without posting:**
+
+```
+.venv/bin/python scripts/post_instagram.py --dry-run [--as-of 2026-11-14]   # what would post, and the caption
+.venv/bin/python scripts/post_instagram.py --test-tunnel <clip.mp4>         # tunnel only; Instagram not contacted
+.venv/bin/python scripts/post_instagram.py --test-ig-download <clip.mp4>    # Instagram downloads + processes; NOT published
+```
+
+Each run makes one attempt. If it fails, the clip stays `not-posted` and the next run tries again.
 
 **Phone texts** (iMessage to `NOTIFY_IMESSAGE_TO` in `.env`): ▶️ when the job starts, ⏹ when it finishes (with what it posted), ⚠️ if it fails. Following the account on your personal Instagram with post notifications on also gives a native push when each Reel goes live.
 
@@ -100,10 +147,12 @@ scripts/scheduler.sh test-alert   # send test texts; click Allow if macOS asks a
 
 In Claude, `/post` does the same: `status` (default), `dry-run`, `now`, `test-alert`, `pause`, `resume`.
 
-**`.env` needs:** `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` and `NOTIFY_IMESSAGE_TO`.
+**`.env` needs:** `INSTAGRAM_ACCESS_TOKEN` (never-expiring system-user token from the Meta app), `INSTAGRAM_USER_ID` and `NOTIFY_IMESSAGE_TO`. Optional: `INSTAGRAM_UPLOAD_METHOD` (`tunnel`, the default, or `resumable`).
+
+**Also needs:** `cloudflared` (`brew install cloudflared`). It runs only during the job, not as a background service.
 
 **For it to keep running:**
-- The Mac is on and you're logged in around 10am. A locked screen is fine. If it's asleep, the post goes out when it wakes, and `sudo pmset repeat wakeorpoweron MTWRFSU 09:58:00` wakes it automatically.
+- The Mac is on, online and you're logged in around 10am. A locked screen is fine. If it's asleep, the post goes out when it wakes, and `sudo pmset repeat wakeorpoweron MTWRFSU 09:58:00` wakes it automatically.
 - The repo stays at this path.
 - The `.mp4` clips aren't deleted before they're posted. They only exist on this Mac.
 
@@ -127,7 +176,7 @@ uv pip install -r requirements.txt
 2. **Log it.** `/clip <url>` creates `videos/creator_video-slug/` with `source.md` and `transcript.md`, and downloads the video into its `media/` folder.
 3. **Find highlights.** The same `/clip` run has Claude write ranked picks to `highlights.md`.
 4. **Edit.** `/render` cuts the clips into the video's `clips/` folder and writes each clip's caption. Media stays out of git.
-5. **Schedule and post.** Approved clips go into `release-schedule.md`, one a day, and are posted with their caption files.
+5. **Schedule and post.** Approved clips go into `release-schedule.md`, one a day. The 10am job posts each one to Instagram automatically, with its caption file.
 6. **Learn.** Add what worked (or didn't) to `analytics/` and update the playbooks.
 
 ---

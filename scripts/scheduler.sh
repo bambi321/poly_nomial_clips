@@ -18,8 +18,8 @@ LABEL="com.polynomial.clips.post"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON="$REPO/.venv/bin/python"
 DOMAIN="gui/$(id -u)"
-HOUR=20
-MINUTE=35
+HOUR=10
+MINUTE=0
 
 write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
   local path="$1" label="$2"; shift 2

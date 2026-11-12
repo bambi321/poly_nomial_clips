@@ -138,6 +138,8 @@ code { font-family: var(--font-mono); font-size: 0.86em; background: var(--accen
 @media (max-width: 480px) { .phases { grid-template-columns: 1fr; } }
 .phase { border-top: 3px solid var(--line); padding-top: 10px; display: grid; gap: 6px; align-content: start; }
 .phase.now { border-top-color: var(--accent); }
+.phase.done { border-top-color: var(--ok); }
+.phase.done .eyebrow { color: var(--ok); }
 .phase p { font-size: 0.9rem; color: var(--muted); }
 .phase .stages { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
 footer { font-size: 0.82rem; color: var(--muted); }
@@ -151,7 +153,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
   <header>
     <div class="eyebrow">poly_nomial_clips · automation</div>
     <h1>From one YouTube link to posted Shorts</h1>
-    <p class="lede">You give the pipeline a URL. Eight stages turn it into captioned 9:16 clips for YouTube Shorts, Instagram Reels and TikTok. Every stage writes a file into the repo, and nothing is published until you approve it.</p>
+    <p class="lede">You give the pipeline a URL. Eight stages turn it into captioned 9:16 clips and post one to Instagram Reels every morning at 10:00. Every stage writes a file into the repo, and nothing is scheduled until you approve it. TikTok and YouTube Shorts come later.</p>
   </header>
 
   <section class="monitor" aria-label="Source video timeline">
@@ -187,10 +189,10 @@ footer { font-size: 0.82rem; color: var(--muted); }
   <section style="display:grid;gap:14px">
     <h2>Build order</h2>
     <div class="phases">
-      <div class="phase now"><div class="phase-label eyebrow">Phase 1 · start here</div><h3>Find the moments</h3><div class="stages">stages 1–3</div><p>URL in, ranked <code>highlights.md</code> out. Cheap to run, and it tests the hardest judgement call first.</p></div>
-      <div class="phase"><div class="eyebrow">Phase 2</div><h3>Cut automatically</h3><div class="stages">stages 4–5</div><p>ffmpeg cuts, face-tracked 9:16 framing and burned-in captions land in each video's <code>clips/</code> folder.</p></div>
-      <div class="phase"><div class="eyebrow">Phase 3</div><h3>Brand and publish</h3><div class="stages">stages 5–7</div><p>A Remotion template for the channel look, then upload to all three platforms after you approve.</p></div>
-      <div class="phase"><div class="eyebrow">Phase 4</div><h3>Run on its own</h3><div class="stages">stage 8 + watcher</div><p>Watch favourite channels for new uploads, and feed performance back into the playbooks.</p></div>
+      <div class="phase done"><div class="phase-label eyebrow">Phase 1 · built</div><h3>Find the moments</h3><div class="stages">stages 1–3 · /clip</div><p>URL in, ranked <code>highlights.md</code> out, with replay heat, science checks and framing notes.</p></div>
+      <div class="phase done"><div class="eyebrow">Phase 2 · built</div><h3>Cut and caption</h3><div class="stages">stages 4–6 · /render</div><p>Numbered 9:16 clips with word-by-word captions, plus a post caption for each: insight, creator credit, 10 hashtags.</p></div>
+      <div class="phase done"><div class="eyebrow">Phase 3 · built</div><h3>Post to Instagram</h3><div class="stages">stage 7 · 10:00 daily</div><p>A macOS scheduler posts one clip a day. Instagram downloads it from a temporary Cloudflare tunnel link. First post 12 Nov 2026.</p></div>
+      <div class="phase now"><div class="eyebrow">Phase 4 · next</div><h3>Grow it</h3><div class="stages">TikTok, Shorts, stage 8</div><p>Add TikTok and YouTube Shorts, watch favourite channels for new uploads, and feed performance back into the playbooks.</p></div>
     </div>
   </section>
 
@@ -285,21 +287,21 @@ footer { font-size: 0.82rem; color: var(--muted); }
       input: "<code>highlights.md</code> + source video", output: "<code>clips/clip1.mp4</code>, <code>clip2.mp4</code>, <code>clip3.mp4</code> (1080×1920)",
       file: "videos/example-channel_event-horizon/clips/plan.txt",
       body: "A  00:02:14.20 → 00:02:52.10  38s  crop=face-track\nB  00:07:40.00 → 00:08:31.40  51s  crop=face-track\nC  00:13:05.30 → 00:13:41.00  36s  crop=blur-fill (diagram)" },
-    { name: "Captions & brand", who: "ffmpeg / Remotion", tools: "ASS subtitles + <code>ffmpeg</code>, later <code>remotion</code>",
-      what: "Burns in word-by-word captions and nothing else. No title cards or credits on screen; creator credits go in the post caption.",
-      input: "Raw cuts + word timings", output: "Finished clips in the video's <code>clips/</code> folder",
-      file: "playbooks/editing-style.md (applied)",
-      body: "captions:  2-3 words per line, centre, 64px, white + dark outline\nhook card: none (clip only)\ncredit:    none on screen; named + linked in the post caption\nmusic:     royalty-free bed at -24 LUFS under speech\noutro:     1.5s channel card" },
+    { name: "Captions", who: "ffmpeg + Claude", tools: "ASS subtitles + <code>ffmpeg</code>; <code>playbooks/captions.md</code>",
+      what: "Burns in word-by-word captions and nothing else: no title cards or credits on screen. Claude then writes each clip's post caption: a short insight, the verbatim creator credit, and 10 hashtags.",
+      input: "Raw cuts + word timings", output: "<code>clipN.mp4</code> + <code>clipN-caption.txt</code> in the video's <code>clips/</code> folder",
+      file: "videos/example-channel_event-horizon/clips/clip1-caption.txt",
+      body: "Time doesn't really stop at a black hole's edge. From far away, someone falling in seems to freeze, but they sail straight through. It's a trick of light, not of time.\n\nFull credits for the original video go to @examplechannel\n\n#science #space #blackholes #physics #relativity #astronomy #universe #examplechannel #sciencefacts #didyouknow" },
     { name: "Review", who: "Claude + you", gate: true, tools: "Claude QA pass, then your approval",
       what: "Claude checks each clip: it stands alone, its science claims match the source, the caption credits the creator, and it doesn't cut off mid-sentence. Then you approve or reject. This stays manual until the clip picks are consistently good.",
       input: "Finished clips + captions", output: "Approve or reject per clip",
       file: "videos/example-channel_event-horizon/review.md",
       body: "A  ✓ stands alone   ✓ claim matches 02:25   ✓ caption credit → APPROVE\nB  ✓ stands alone   ✓ claim matches 07:58   ✓ caption credit → APPROVE\nC  ✗ opens mid-thought (\"...and that's why\")         → RECUT start to 13:03.8" },
-    { name: "Publish", who: "Platform APIs", tools: "YouTube Data API, Instagram Graph API, TikTok Content Posting API",
-      what: "Uploads approved clips with captions, hashtags and a link to the original video. A scheduler like Buffer or Metricool can replace the three integrations with one.",
-      input: "Approved clips", output: "Post links on each platform",
-      file: "videos/example-channel_event-horizon/posts.md",
-      body: "| clip | platform        | posted (AEDT)    | link |\n|------|-----------------|------------------|------|\n| A    | YouTube Shorts  | 2026-11-12 18:00 | …    |\n| A    | Instagram Reels | 2026-11-12 18:05 | …    |\n| A    | TikTok          | 2026-11-12 18:10 | …    |\n| B    | YouTube Shorts  | 2026-11-14 18:00 | …    |" },
+    { name: "Publish", who: "Scheduler, 10:00", tools: "macOS launchd → <code>post_instagram.py</code> → Cloudflare quick tunnel → Instagram Graph API (<code>video_url</code>)",
+      what: "Each morning at 10:00 the scheduler takes the next clip from release-schedule.md, shares it for 2–3 minutes at a random Cloudflare tunnel link (only that one file is reachable), and Instagram downloads it from there. Once processed, it's published as a Reel with its caption, the tunnel closes, and you get a text.",
+      input: "release-schedule.md + clipN.mp4 + clipN-caption.txt", output: "Live Reel, clip marked posted, link logged",
+      file: "logs/post.log",
+      body: "10:00:05  job started\n10:00:11  tunnel open: https://<random>.trycloudflare.com/<random>.mp4\n10:01:41  tunnel verified: file downloads correctly\n10:01:44  Instagram is downloading and processing the clip\n10:02:30  tunnel closed and temporary copy deleted\n10:02:43  posted clip1: https://www.instagram.com/reel/…\n10:02:43  job finished" },
     { name: "Learn", who: "Claude", tools: "Platform analytics → <code>analytics/</code>",
       what: "Pulls views, watch-through and shares after 48 hours, notes which hooks held attention, and updates the playbooks so the next highlight pass picks better.",
       input: "Post performance", output: "Notes in <code>analytics/</code>, playbook edits",
