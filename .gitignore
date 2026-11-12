@@ -61,13 +61,12 @@ Proxies/
 *.pek
 
 # ─────────────────────────────────────────────
-# Episodes: commit the .md notes, keep each episode's video and data local
-#   episodes/<name>/media/    downloaded video, metadata, word timings
-#   episodes/<name>/renders/  finished vertical clips
-# (the media/ and renders/ rules below cover these at any depth)
+# Videos: commit the notes and caption files, keep video and data local
+#   videos/<name>/media/            downloaded video, metadata, word timings
+#   videos/<name>/clips/*.mp4       finished clips (ignored by *.mp4 above)
+#   videos/<name>/clips/*.txt       post captions: committed
 # ─────────────────────────────────────────────
-episodes/*/media/
-episodes/*/renders/
+videos/*/media/
 
 # ─────────────────────────────────────────────
 # Working folders for downloads and renders
@@ -122,3 +121,6 @@ Desktop.ini
 .idea/
 *.swp
 *~
+
+# Posting logs (scripts/post_instagram.py, the daily 10am job)
+logs/

@@ -3,19 +3,21 @@
 and write the files Claude reads to pick highlights.
 
 Usage:
-    .venv/bin/python scripts/ingest.py <youtube-url> [--model small] [--language en] [--force]
+    .venv/bin/python scripts/ingest.py <youtube-url> [--model medium] [--language en] [--force]
 
-Everything for one video goes in episodes/<YYYY-MM-DD>_<creator>_<video-slug>/:
+Everything for one video goes in videos/<creator>_<video-slug>/:
 
-    source.md            video details, chapters, description       (committed)
-    transcript.md        sentence-level transcript with replay heat  (committed)
-    media/source.mp4     the video                                   (ignored by git)
-    media/info.json      full yt-dlp metadata                        (ignored by git)
-    media/words.json     word-level timings, used later for captions (ignored by git)
-    media/scenes.json    scene cut times in seconds                  (ignored by git)
+    source.md            video details, chapters, description       (kept)
+    transcript.md        sentence-level transcript with replay heat  (kept)
+    media/source.mp4     the video                                   (working file)
+    media/info.json      full yt-dlp metadata                        (working file)
+    media/words.json     word-level timings, used for captions       (working file)
+    media/scenes.json    scene cut times in seconds                  (working file)
+
+media/ is ignored by git and deleted by `render.py --cleanup` once the clips are done.
 
 Re-running is safe: finished steps are skipped unless --force is passed.
-The last line on stdout is `EPISODE_DIR=<path>` so callers can find the output.
+The last line on stdout is `VIDEO_DIR=<path>` so callers can find the output.
 """
 
 import argparse
@@ -73,7 +75,7 @@ def fetch_info(url):
 def download(url, dest):
     cmd = ["yt-dlp", "--no-playlist", "-f", VIDEO_FORMAT,
            "--merge-output-format", "mp4", "-o", str(dest), url]
-    # Send yt-dlp's progress to stderr so stdout stays clean for EPISODE_DIR=
+    # Send yt-dlp's progress to stderr so stdout stays clean for VIDEO_DIR=
     result = subprocess.run(cmd, stdout=sys.stderr)
     if result.returncode != 0 or not dest.exists():
         sys.exit("Video download failed (see yt-dlp output above).")
@@ -138,7 +140,7 @@ def heat_peaks(heatmap, count=6):
 
 # ── Writing the Markdown files ───────────────────────────────────────────────
 
-def write_source_md(path, info, media_dir):
+def write_source_md(path, info):
     upload = info.get("upload_date") or ""
     published = f"{upload[:4]}-{upload[4:6]}-{upload[6:]}" if len(upload) == 8 else "unknown"
     lines = [
@@ -147,12 +149,13 @@ def write_source_md(path, info, media_dir):
         f"- **url:** {info.get('webpage_url')}",
         f"- **video id:** {info.get('id')}",
         f"- **creator:** [{info.get('channel') or info.get('uploader')}]({info.get('channel_url') or info.get('uploader_url') or ''})",
+        f"- **youtube handle:** {info.get('uploader_id') or 'unknown'}",
+        f"- **channel link:** {info.get('uploader_url') or info.get('channel_url') or 'unknown'}",
         f"- **published:** {published}",
         f"- **length:** {tc(info.get('duration') or 0, decimals=False)}",
         f"- **views at ingest:** {info.get('view_count', 'unknown'):,}" if isinstance(info.get("view_count"), int)
         else "- **views at ingest:** unknown",
         f"- **ingested:** {date.today().isoformat()}",
-        f"- **local media:** `{media_dir.relative_to(ROOT)}/source.mp4` (not in git)",
         "",
     ]
     chapters = info.get("chapters") or []
@@ -219,8 +222,8 @@ def write_transcript_md(path, info, transcript, heatmap, scenes):
 def main():
     parser = argparse.ArgumentParser(description="Download and transcribe a YouTube video for /clip.")
     parser.add_argument("url")
-    parser.add_argument("--model", default="small",
-                        help="WhisperX model: tiny, base, small (default), medium, large-v3")
+    parser.add_argument("--model", default="medium",
+                        help="WhisperX model: tiny, base, small, medium (default), large-v3")
     parser.add_argument("--language", default=None, help="Force a language code, e.g. en")
     parser.add_argument("--force", action="store_true", help="Redo every step even if files exist")
     args = parser.parse_args()
@@ -234,12 +237,10 @@ def main():
     if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
         sys.exit("That's a live or upcoming stream. Wait until it has finished and been uploaded.")
 
-    upload = info.get("upload_date") or date.today().strftime("%Y%m%d")
-    name = (f"{upload[:4]}-{upload[4:6]}-{upload[6:]}_"
-            f"{slugify(info.get('channel') or info.get('uploader'), 24)}_"
+    name = (f"{slugify(info.get('channel') or info.get('uploader'), 24)}_"
             f"{slugify(info.get('title'), 48)}")
-    episode_dir = ROOT / "episodes" / name
-    media_dir = episode_dir / "media"
+    video_dir = ROOT / "videos" / name
+    media_dir = video_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
     (media_dir / "info.json").write_text(json.dumps(info))
     log(f"{info.get('title')} · {tc(info.get('duration') or 0, False)} · {info.get('channel')}")
@@ -269,12 +270,12 @@ def main():
         scenes = json.loads(scenes_path.read_text())
 
     heatmap = info.get("heatmap") or []
-    write_source_md(episode_dir / "source.md", info, media_dir)
-    write_transcript_md(episode_dir / "transcript.md", info, transcript, heatmap, scenes)
+    write_source_md(video_dir / "source.md", info)
+    write_transcript_md(video_dir / "transcript.md", info, transcript, heatmap, scenes)
 
     log(f"Done: {len(transcript['segments'])} sentences, {len(scenes)} scene cuts, "
         f"{'heatmap found' if heatmap else 'no heatmap'}.")
-    print(f"EPISODE_DIR={episode_dir.relative_to(ROOT)}")
+    print(f"VIDEO_DIR={video_dir.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+# Caption fixes for this episode: one "wrong => right" per line.
+# Applied to the word timings before rendering. The transcript files are not changed.
+tropopores => tropopause
+nuclear winds that follow => nuclear winter that follows
