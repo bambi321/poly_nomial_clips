@@ -1,0 +1,4 @@
+# caption fixes for this video
+young => yang
+man mouth => mental math
+should => sure
