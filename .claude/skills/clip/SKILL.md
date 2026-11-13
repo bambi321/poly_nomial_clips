@@ -2,7 +2,7 @@
 name: clip
 description: The whole pipeline in one unattended sweep. Give it a YouTube science video and it downloads and transcribes it, picks the highlights, renders the 9:16 clips with captions, writes each post caption, checks everything, cleans up and queues the clips at the end of release-schedule.md for the 10am/1pm/5pm posting job. Use when the user runs /clip <url> or shares a YouTube video to clip.
 argument-hint: <youtube-url> [--review]
-allowed-tools: Bash(.venv/bin/python scripts/ingest.py:*), Bash(.venv/bin/python scripts/render.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Read, Write, Edit, Glob
+allowed-tools: Bash(.venv/bin/python scripts/ingest.py:*), Bash(.venv/bin/python scripts/render.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Bash(.venv/bin/python scripts/youtube.py:*), Read, Write, Edit, Glob
 ---
 
 # /clip
@@ -94,7 +94,15 @@ After the one allowed fix-and-re-render, any clip that still has a problem (cut 
 
    It adds them in clip order at the next free 10:00/13:00/17:00 slots after the last scheduled clip, checks each caption again, skips anything already scheduled, and sends the user a notification with the dates. Never edit `release-schedule.md` by hand: the script waits for any post that's running.
 
-2. Only once `add` has succeeded, delete the working files:
+2. Make the YouTube files (a copy under 10 MB and the title and description) for the queued clips. The 10:05 YouTube job uploads them on their days:
+
+   ```
+   .venv/bin/python scripts/youtube.py prep <VIDEO_DIR>
+   ```
+
+   If this fails, say so in the report but carry on: the YouTube job makes any missing files itself.
+
+3. Only once `add` has succeeded, delete the working files:
 
    ```
    .venv/bin/python scripts/render.py <VIDEO_DIR> --cleanup

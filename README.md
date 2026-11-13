@@ -69,6 +69,8 @@ Folders get created as we need them, so not all of these exist yet.
                  → cut + 9:16 framing + word-by-word captions (ffmpeg, MediaPipe) → clipN.mp4 + clipN-caption.txt
                  → self-check → queue at the next free slots in release-schedule.md → clean up → notify you
 10:00 · 13:00 · 17:00    scheduler (launchd) → Cloudflare quick tunnel → Instagram downloads the clip → Reel published
+10:05                    YouTube job (launchd) → Claude + Claude in Chrome → YouTube Studio:
+                         10:00 clip published, 13:00 and 17:00 clips scheduled
 ```
 
 | Stage | Status |
@@ -77,7 +79,9 @@ Folders get created as we need them, so not all of these exist yet.
 | Cut, caption and write post captions (`/render`, also run by `/clip`) | ✅ built |
 | One-sweep `/clip`: link in, clips queued | ✅ built |
 | Posting to Instagram three times a day (scheduler + tunnel) | ✅ built, first post 12 Nov 2026 |
-| TikTok and YouTube Shorts | not started |
+| YouTube Shorts, via YouTube Studio in Chrome (daily 10:05 job) | ✅ built, first scheduled run 13 Nov 2026 |
+| YouTube Data API uploads | waiting on Google's branding check and YouTube API audit |
+| TikTok | not started |
 | Performance tracking (`analytics/`) | not started |
 
 ### Using `/clip`
@@ -180,6 +184,29 @@ To change the posting times, edit `SLOTS` in `scripts/schedule.py`, then run `sc
 
 Missed slots are caught up one clip per run, never two at once.
 
+### Posting to YouTube Shorts (10:05 job)
+
+API uploads from an unaudited Google Cloud project are locked to private, so for now the clips go up through YouTube Studio in Chrome. Every day at **10:05** `scripts/youtube.py run` starts Claude Code in the background (`claude -p --chrome`), which follows `.claude/skills/youtube/SKILL.md`:
+
+- the **10:00** clip is uploaded and published straight away
+- the **13:00** and **17:00** clips are uploaded and **scheduled** in Studio, so YouTube publishes them on time
+- each result goes into the **YouTube** column of `release-schedule.md` and the video's `posts.md`, and you get a 📺 notification (⚠️ if anything didn't make it)
+
+Each clip needs two extra files, made by `scripts/youtube.py prep` (run by `/clip`, and again by the job if missing):
+- `clipN-yt.mp4`: a copy under 10 MB (the extension's upload limit), 30 fps. It looks the same once YouTube re-encodes it. Clips already under 10 MB are uploaded as they are.
+- `clipN-youtube.txt`: the title (from `highlights.md`), a blank line, then the description: the post caption with a link to the original video under the credit line.
+
+```bash
+.venv/bin/python scripts/youtube.py status                 # YouTube state and link of every clip
+.venv/bin/python scripts/youtube.py plan [--date D]        # what the next run would upload
+.venv/bin/python scripts/youtube.py run --date D --dry-run # the exact instructions it would give Claude
+scripts/scheduler.sh youtube-now                           # run today's YouTube job now
+```
+
+**For it to work at 10:05:** Chrome is open, signed in to the Poly Nomial YouTube channel, with the Claude extension connected and allowed on studio.youtube.com; the Mac is awake (a locked screen is fine). The run uses your Claude plan. If it fails, the clips stay `—` or `failed`, Instagram is unaffected, and the next day's run retries anything from the day before. To do it by hand, run `/youtube` in Claude.
+
+Once the YouTube API audit passes, this can switch to direct API uploads with scheduled publishing.
+
 ### Permissions for unattended runs
 
 So `/clip` can write its files without asking, add this to `.claude/settings.json` (you add it yourself: Claude isn't allowed to change its own permissions):
@@ -191,6 +218,7 @@ So `/clip` can write its files without asking, add this to `.claude/settings.jso
       "Bash(.venv/bin/python scripts/ingest.py:*)",
       "Bash(.venv/bin/python scripts/render.py:*)",
       "Bash(.venv/bin/python scripts/schedule.py:*)",
+      "Bash(.venv/bin/python scripts/youtube.py:*)",
       "Edit(./videos/**)",
       "Edit(./knowledge/**)"
     ],
