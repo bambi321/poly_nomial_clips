@@ -2,7 +2,7 @@
 """Post the next due clip from release-schedule.md to Instagram as a Reel.
 
 Usage:
-    python scripts/post_instagram.py              post the clip that's due (used by the 10am and 5pm jobs)
+    python scripts/post_instagram.py              post the clip that's due (used by the 10am, 1pm and 5pm jobs)
     python scripts/post_instagram.py --dry-run    show what would post and check everything, without posting
     python scripts/post_instagram.py --dry-run --as-of "2026-11-14 17:00"   same, pretending it's then
     python scripts/post_instagram.py --status     show the schedule, what's next, and recent log lines

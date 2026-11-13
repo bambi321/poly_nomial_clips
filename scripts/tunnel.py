@@ -19,6 +19,7 @@ Usage:
 
 import contextlib
 import hashlib
+import queue
 import re
 import secrets
 import shutil
@@ -31,7 +32,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 CLOUDFLARED_CANDIDATES = ["/opt/homebrew/bin/cloudflared", "/usr/local/bin/cloudflared"]
-URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+# api.trycloudflare.com shows up in cloudflared error messages; it is never a tunnel.
+URL_PATTERN = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
 
 
 class TunnelError(Exception):
@@ -156,18 +158,24 @@ def share_file(file_path, log=print):
         proc = subprocess.Popen(
             [cloudflared, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        base, lines, deadline = None, [], time.time() + 45
-        while time.time() < deadline and proc.poll() is None:
-            line = proc.stdout.readline()
-            lines.append(line)
+        # Read cloudflared's output on a background thread (for the whole run, so its
+        # pipe never fills up) and wait at most 45s for the tunnel address.
+        lines = queue.Queue()
+        threading.Thread(target=lambda: [lines.put(l) for l in proc.stdout], daemon=True).start()
+        base, seen, deadline = None, [], time.time() + 45
+        while not base and time.time() < deadline:
+            try:
+                line = lines.get(timeout=1)
+            except queue.Empty:
+                if proc.poll() is not None:
+                    break
+                continue
+            seen.append(line)
             found = URL_PATTERN.search(line)
             if found:
                 base = found.group(0)
-                break
         if not base:
-            raise TunnelError("cloudflared didn't open a tunnel: " + "".join(lines[-5:]).strip()[:300])
-        # Keep reading cloudflared's output in the background so its pipe never fills up.
-        threading.Thread(target=lambda: [None for _ in proc.stdout], daemon=True).start()
+            raise TunnelError("cloudflared didn't open a tunnel: " + "".join(seen[-5:]).strip()[:300])
 
         url = f"{base}/{name}"
         log(f"tunnel open: {base}/<random-name>.mp4 ({size / 1e6:.1f} MB); checking it serves the file")

@@ -1,6 +1,6 @@
 ---
 name: clip
-description: The whole pipeline in one unattended sweep. Give it a YouTube science video and it downloads and transcribes it, picks the highlights, renders the 9:16 clips with captions, writes each post caption, checks everything, cleans up and queues the clips at the end of release-schedule.md for the 10am/5pm posting job. Use when the user runs /clip <url> or shares a YouTube video to clip.
+description: The whole pipeline in one unattended sweep. Give it a YouTube science video and it downloads and transcribes it, picks the highlights, renders the 9:16 clips with captions, writes each post caption, checks everything, cleans up and queues the clips at the end of release-schedule.md for the 10am/1pm/5pm posting job. Use when the user runs /clip <url> or shares a YouTube video to clip.
 argument-hint: <youtube-url> [--review]
 allowed-tools: Bash(.venv/bin/python scripts/ingest.py:*), Bash(.venv/bin/python scripts/render.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Read, Write, Edit, Glob
 ---
@@ -92,7 +92,7 @@ After the one allowed fix-and-re-render, any clip that still has a problem (cut 
    .venv/bin/python scripts/schedule.py add <VIDEO_DIR> --clips 1,2,4 --notify
    ```
 
-   It adds them in clip order at the next free 10:00/17:00 slots after the last scheduled clip, checks each caption again, skips anything already scheduled, and sends the user a notification with the dates. Never edit `release-schedule.md` by hand: the script waits for any post that's running.
+   It adds them in clip order at the next free 10:00/13:00/17:00 slots after the last scheduled clip, checks each caption again, skips anything already scheduled, and sends the user a notification with the dates. Never edit `release-schedule.md` by hand: the script waits for any post that's running.
 
 2. Only once `add` has succeeded, delete the working files:
 

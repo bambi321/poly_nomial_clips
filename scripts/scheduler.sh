@@ -1,6 +1,6 @@
 #!/bin/bash
 # Manage the Instagram post job (a macOS LaunchAgent) that runs at each daily slot.
-# The slot times (10:00 and 17:00, the Mac's local time) come from SLOTS in scripts/schedule.py.
+# The slot times (10:00, 13:00 and 17:00, the Mac's local time) come from SLOTS in scripts/schedule.py.
 #
 #   scripts/scheduler.sh install      turn on (or update after changing SLOTS): post the due clip at each slot
 #   scripts/scheduler.sh uninstall    turn off (nothing else changes; install again to resume)
@@ -19,7 +19,7 @@ LABEL="com.polynomial.clips.post"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON="$REPO/.venv/bin/python"
 DOMAIN="gui/$(id -u)"
-SLOTS="$("$PYTHON" "$REPO/scripts/schedule.py" slots)"   # e.g. "10:00 17:00"
+SLOTS="$("$PYTHON" "$REPO/scripts/schedule.py" slots)"   # e.g. "10:00 13:00 17:00"
 
 write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
   local path="$1" label="$2"; shift 2
@@ -72,7 +72,7 @@ case "${1:-status}" in
     write_plist "$PLIST" "$LABEL"
     is_loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST"
-    echo "Scheduler on: posts the due clip every day at ${SLOTS// / and }."
+    echo "Scheduler on: posts the due clip every day at ${SLOTS// /, }."
     ;;
   uninstall)
     is_loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" || true
@@ -81,7 +81,7 @@ case "${1:-status}" in
     ;;
   status)
     if is_loaded "$LABEL"; then
-      echo "Scheduler: ON (daily at ${SLOTS// / and })"
+      echo "Scheduler: ON (daily at ${SLOTS// /, })"
       launchctl print "$DOMAIN/$LABEL" | grep -E "last exit code|runs =" | sed 's/^[[:space:]]*/  /' || true
     else
       echo "Scheduler: OFF"

@@ -124,3 +124,6 @@ Desktop.ini
 
 # Posting logs (scripts/post_instagram.py, the daily 10am job)
 logs/
+
+# OAuth client files and saved logins for YouTube/TikTok posting
+secrets/

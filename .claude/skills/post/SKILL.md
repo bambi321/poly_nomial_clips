@@ -1,6 +1,6 @@
 ---
 name: post
-description: Check on or control the Instagram posting job (10am and 5pm daily). Shows what's posted, what's next and recent errors; can dry-run, post the due clip now, send test notifications, or pause and resume the scheduler. Use when the user runs /post, or asks about posting, the schedule, the scheduler, or why a post did or didn't go out.
+description: Check on or control the Instagram posting job (10am, 1pm and 5pm daily). Shows what's posted, what's next and recent errors; can dry-run, post the due clip now, send test notifications, or pause and resume the scheduler. Use when the user runs /post, or asks about posting, the schedule, the scheduler, or why a post did or didn't go out.
 argument-hint: [status | dry-run | now | test-alert | pause | resume]
 allowed-tools: Bash(scripts/scheduler.sh:*), Bash(.venv/bin/python scripts/post_instagram.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Bash(tail:*), Read, Edit
 ---
@@ -9,7 +9,7 @@ allowed-tools: Bash(scripts/scheduler.sh:*), Bash(.venv/bin/python scripts/post_
 
 Arguments: $ARGUMENTS (default: `status`)
 
-The job is a macOS LaunchAgent that runs `scripts/post_instagram.py` at each slot: 10:00 and 17:00 Melbourne/Sydney time (`SLOTS` in `scripts/schedule.py`). Instagram downloads each clip from a temporary Cloudflare tunnel link (`scripts/tunnel.py`). Each run posts the earliest `not-posted` clip in `release-schedule.md` whose date and time have passed (one per run), marks it `posted`, and adds a line to the video's `posts.md`. To see or change the queue, use `.venv/bin/python scripts/schedule.py list` (or `respace`), never a hand edit. It texts the user when it starts (▶️), finishes (⏹) and fails (⚠️). Logs are in `logs/post.log`.
+The job is a macOS LaunchAgent that runs `scripts/post_instagram.py` at each slot: 10:00, 13:00 and 17:00 Melbourne/Sydney time (`SLOTS` in `scripts/schedule.py`). Instagram downloads each clip from a temporary Cloudflare tunnel link (`scripts/tunnel.py`). Each run posts the earliest `not-posted` clip in `release-schedule.md` whose date and time have passed (one per run), marks it `posted`, and adds a line to the video's `posts.md`. To see or change the queue, use `.venv/bin/python scripts/schedule.py list` (or `respace`), never a hand edit. It texts the user when it starts (▶️), finishes (⏹) and fails (⚠️). Logs are in `logs/post.log`.
 
 Never print or read out `.env` values.
 
@@ -19,7 +19,7 @@ Run `scripts/scheduler.sh status`. Report in a few lines:
 - whether the scheduler is ON, and the last run's exit code
 - what posted most recently, and what's next (clip and date)
 - anything overdue, or any `FAILED` lines in the recent log, with the likely fix (table below)
-- if 4 or fewer clips are left (2 days at two posts a day), suggest running `/clip` on a new video
+- if 6 or fewer clips are left (2 days at three posts a day), suggest running `/clip` on a new video
 
 ## dry-run
 

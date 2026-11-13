@@ -91,7 +91,7 @@ When the user says the clips are good:
 
    This removes `media/` (the source video, word timings, contact sheet and manifest) and anything in `clips/` that isn't a clip or caption. The video folder keeps `source.md`, `transcript.md`, `highlights.md`, `caption-fixes.txt` and `clips/`.
 
-2. Queue any clips that aren't scheduled yet (it skips ones that are, and puts new ones on the next free 10:00/17:00 slots):
+2. Queue any clips that aren't scheduled yet (it skips ones that are, and puts new ones on the next free 10:00/13:00/17:00 slots):
 
    ```
    .venv/bin/python scripts/schedule.py add <video> [--clips 1,3]

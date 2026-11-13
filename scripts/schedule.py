@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCHEDULE = ROOT / "release-schedule.md"
 LOCK = ROOT / "logs" / "post.lock"
-SLOTS = ["10:00", "17:00"]
+SLOTS = ["10:00", "13:00", "17:00"]
 
 CREDIT_PREFIX = "Full credits for the original video go to @"
 HEADER = "| Date | Time | Clip | Title | Creator | File | Caption | Status |"

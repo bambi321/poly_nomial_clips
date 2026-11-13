@@ -153,7 +153,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
   <header>
     <div class="eyebrow">poly_nomial_clips · automation</div>
     <h1>From one YouTube link to posted Shorts</h1>
-    <p class="lede">You run <code>/clip &lt;url&gt;</code> once. In a single unattended sweep, the pipeline turns the video into captioned 9:16 clips, checks them and queues them. A scheduler then posts them to Instagram Reels at 10:00 and 17:00 every day. Every stage writes a file into the repo. Add <code>--review</code> to approve the picks yourself. TikTok and YouTube Shorts come later.</p>
+    <p class="lede">You run <code>/clip &lt;url&gt;</code> once. In a single unattended sweep, the pipeline turns the video into captioned 9:16 clips, checks them and queues them. A scheduler then posts them to Instagram Reels at 10:00, 13:00 and 17:00 every day. Every stage writes a file into the repo. Add <code>--review</code> to approve the picks yourself. TikTok and YouTube Shorts come later.</p>
   </header>
 
   <section class="monitor" aria-label="Source video timeline">
@@ -191,7 +191,7 @@ footer { font-size: 0.82rem; color: var(--muted); }
     <div class="phases">
       <div class="phase done"><div class="phase-label eyebrow">Phase 1 · built</div><h3>Find the moments</h3><div class="stages">stages 1–3 · /clip</div><p>URL in, ranked <code>highlights.md</code> out, with replay heat, science checks and framing notes. Only clips scoring 7/10+ go forward.</p></div>
       <div class="phase done"><div class="eyebrow">Phase 2 · built</div><h3>Cut and caption</h3><div class="stages">stages 4–6 · run by /clip</div><p>Numbered 9:16 clips with word-by-word captions, plus a post caption for each: insight, creator credit, 10 hashtags. Self-checked, then queued at the next free slots.</p></div>
-      <div class="phase done"><div class="eyebrow">Phase 3 · built</div><h3>Post to Instagram</h3><div class="stages">stage 7 · 10:00 &amp; 17:00</div><p>A macOS scheduler posts twice a day, in queue order. Instagram downloads each clip from a temporary Cloudflare tunnel link. First post 12 Nov 2026.</p></div>
+      <div class="phase done"><div class="eyebrow">Phase 3 · built</div><h3>Post to Instagram</h3><div class="stages">stage 7 · 10:00, 13:00 &amp; 17:00</div><p>A macOS scheduler posts three times a day, in queue order. Instagram downloads each clip from a temporary Cloudflare tunnel link. First post 12 Nov 2026.</p></div>
       <div class="phase now"><div class="eyebrow">Phase 4 · next</div><h3>Grow it</h3><div class="stages">TikTok, Shorts, stage 8</div><p>Add TikTok and YouTube Shorts, watch favourite channels for new uploads, and feed performance back into the playbooks.</p></div>
     </div>
   </section>
@@ -293,12 +293,12 @@ footer { font-size: 0.82rem; color: var(--muted); }
       file: "videos/example-channel_event-horizon/clips/clip1-caption.txt",
       body: "Time doesn't really stop at a black hole's edge. From far away, someone falling in seems to freeze, but they sail straight through. It's a trick of light, not of time.\n\nFull credits for the original video go to @examplechannel\n\n#science #space #blackholes #physics #relativity #astronomy #universe #examplechannel #sciencefacts #didyouknow" },
     { name: "Check & queue", who: "Claude", tools: "Claude QA pass → <code>scripts/schedule.py add</code>",
-      what: "Claude checks each clip from the contact sheet and manifest: it starts and ends on a full sentence, the captions are spelled right, nothing extra is on screen, and the post caption follows the rules. Problems get one fix and re-render, and a clip that still fails is left out. The good clips are queued at the next free 10:00/17:00 slots, the working files are deleted, and you get a notification. No approval step unless you ran /clip --review.",
+      what: "Claude checks each clip from the contact sheet and manifest: it starts and ends on a full sentence, the captions are spelled right, nothing extra is on screen, and the post caption follows the rules. Problems get one fix and re-render, and a clip that still fails is left out. The good clips are queued at the next free 10:00/13:00/17:00 slots, the working files are deleted, and you get a notification. No approval step unless you ran /clip --review.",
       input: "Finished clips + captions", output: "Rows in <code>release-schedule.md</code>, a 🎬 notification",
       file: "release-schedule.md",
-      body: "queued clip1 for Mon 16 Nov 10:00: Time stops at the horizon. Except it doesn't.\nqueued clip2 for Mon 16 Nov 17:00: Spaghettification, explained with a rubber band\nskipped clip3: opens mid-thought after re-render (left out of the queue)" },
-    { name: "Publish", who: "Scheduler, 10:00 & 17:00", tools: "macOS launchd → <code>post_instagram.py</code> → Cloudflare quick tunnel → Instagram Graph API (<code>video_url</code>)",
-      what: "At 10:00 and 17:00 every day, the scheduler takes the next due clip from release-schedule.md, shares it for 2–3 minutes at a random Cloudflare tunnel link (only that one file is reachable), and Instagram downloads it from there. Once processed, it's published as a Reel with its caption, the tunnel closes, and you get a text.",
+      body: "queued clip1 for Mon 16 Nov 10:00: Time stops at the horizon. Except it doesn't.\nqueued clip2 for Mon 16 Nov 13:00: Spaghettification, explained with a rubber band\nskipped clip3: opens mid-thought after re-render (left out of the queue)" },
+    { name: "Publish", who: "Scheduler, 10:00, 13:00 & 17:00", tools: "macOS launchd → <code>post_instagram.py</code> → Cloudflare quick tunnel → Instagram Graph API (<code>video_url</code>)",
+      what: "At 10:00, 13:00 and 17:00 every day, the scheduler takes the next due clip from release-schedule.md, shares it for 2–3 minutes at a random Cloudflare tunnel link (only that one file is reachable), and Instagram downloads it from there. Once processed, it's published as a Reel with its caption, the tunnel closes, and you get a text.",
       input: "release-schedule.md + clipN.mp4 + clipN-caption.txt", output: "Live Reel, clip marked posted, link logged",
       file: "logs/post.log",
       body: "10:00:05  job started\n10:00:11  tunnel open: https://<random>.trycloudflare.com/<random>.mp4\n10:01:41  tunnel verified: file downloads correctly\n10:01:44  Instagram is downloading and processing the clip\n10:02:30  tunnel closed and temporary copy deleted\n10:02:43  posted clip1: https://www.instagram.com/reel/…\n10:02:43  job finished" },
