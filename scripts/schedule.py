@@ -34,9 +34,10 @@ LOCK = ROOT / "logs" / "post.lock"
 SLOTS = ["10:00", "13:00", "17:00"]
 
 CREDIT_PREFIX = "Full credits for the original video go to @"
-HEADER = "| Date | Time | Clip | Title | Creator | File | Caption | YouTube | Status |"
-SEPARATOR = "|------|------|------|-------|---------|------|---------|---------|--------|"
+HEADER = "| Date | Time | Clip | Title | Creator | File | Caption | YouTube | TikTok | Status |"
+SEPARATOR = "|------|------|------|-------|---------|------|---------|---------|--------|--------|"
 NO_YOUTUBE = "—"  # YouTube cell before the clip is uploaded there
+NO_TIKTOK = "—"   # TikTok cell before the clip is uploaded there
 ROW_START = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}")
 
 
@@ -53,14 +54,16 @@ def parse_row(line):
         cells.insert(1, SLOTS[0])
     if len(cells) == 8:  # older format without a YouTube column
         cells.insert(7, NO_YOUTUBE)
-    if len(cells) < 9:
+    if len(cells) == 9:  # older format without a TikTok column
+        cells.insert(8, NO_TIKTOK)
+    if len(cells) < 10:
         return None
     when = datetime.combine(date.fromisoformat(cells[0][:10]), time.fromisoformat(cells[1]))
     return {
         "when": when, "date": when.date(), "clip": cells[2], "title": cells[3], "creator": cells[4],
         "file_cell": cells[5], "caption_cell": cells[6],
         "video": md_link(cells[5]), "caption": md_link(cells[6]),
-        "youtube": cells[7] or NO_YOUTUBE, "status": cells[8],
+        "youtube": cells[7] or NO_YOUTUBE, "tiktok": cells[8] or NO_TIKTOK, "status": cells[9],
     }
 
 
@@ -79,7 +82,7 @@ def read_schedule():
 def format_row(r):
     return (f"| {r['when']:%Y-%m-%d (%a)} | {r['when']:%H:%M} | {r['clip']} | {r['title']} | "
             f"{r['creator']} | {r['file_cell']} | {r['caption_cell']} | {r.get('youtube', NO_YOUTUBE)} | "
-            f"{r['status']} |")
+            f"{r.get('tiktok', NO_TIKTOK)} | {r['status']} |")
 
 
 def write_schedule(rows):
@@ -207,7 +210,7 @@ def cmd_add(video, only, notify=False):
             when = next(free)
             row = {"when": when, "clip": name, "title": c["title"].replace("|", "–"), "creator": creator,
                    "file_cell": f"[{name}.mp4]({mp4})", "caption_cell": f"[caption]({cap})",
-                   "youtube": NO_YOUTUBE, "status": "not-posted"}
+                   "youtube": NO_YOUTUBE, "tiktok": NO_TIKTOK, "status": "not-posted"}
             rows.append(row)
             added.append(row)
         if added:
@@ -244,6 +247,9 @@ def cmd_respace():
         if r.get("youtube", NO_YOUTUBE).startswith("[scheduled"):
             print(f"  note: {r['clip']} is already scheduled on YouTube for its old time; "
                   "change it in YouTube Studio if it should move too")
+        if r.get("tiktok", NO_TIKTOK).startswith(("[scheduled", "scheduled")):
+            print(f"  note: {r['clip']} is already scheduled on TikTok for its old time; "
+                  "change it in TikTok Studio if it should move too")
 
 
 def main():

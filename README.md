@@ -71,6 +71,8 @@ Folders get created as we need them, so not all of these exist yet.
 10:00 · 13:00 · 17:00    scheduler (launchd) → Cloudflare quick tunnel → Instagram downloads the clip → Reel published
 10:05                    YouTube job (launchd) → Claude + Claude in Chrome → YouTube Studio:
                          10:00 clip published, 13:00 and 17:00 clips scheduled
+10:15                    TikTok job (launchd) → Claude + Claude in Chrome → TikTok Studio:
+                         the same, once the YouTube run has finished with Chrome
 ```
 
 | Stage | Status |
@@ -81,7 +83,7 @@ Folders get created as we need them, so not all of these exist yet.
 | Posting to Instagram three times a day (scheduler + tunnel) | ✅ built, first post 12 Nov 2026 |
 | YouTube Shorts, via YouTube Studio in Chrome (daily 10:05 job) | ✅ built, first scheduled run 13 Nov 2026 |
 | YouTube Data API uploads | waiting on Google's branding check and YouTube API audit |
-| TikTok | not started |
+| TikTok, via TikTok Studio in Chrome (daily 10:15 job) | ✅ built, first 7 clips posted 14 Nov 2026; first scheduled run 15 Nov |
 | Performance tracking (`analytics/`) | not started |
 
 ### Using `/clip`
@@ -207,6 +209,26 @@ scripts/scheduler.sh youtube-now                           # run today's YouTube
 
 Once the YouTube API audit passes, this can switch to direct API uploads with scheduled publishing.
 
+### Posting to TikTok (10:15 job)
+
+The same idea as YouTube, because TikTok's Content Posting API only posts privately until TikTok audits the app. Every day at **10:15** `scripts/tiktok.py run` starts Claude Code in the background, which follows `.claude/skills/tiktok/SKILL.md` in TikTok Studio: the **10:00** clip is posted straight away and the **13:00** and **17:00** clips are **scheduled**. If the YouTube run is still using Chrome, it waits (both take `logs/chrome.lock`), and it works out which clips are due once Chrome is free. Results go into the **TikTok** column of `release-schedule.md` and `posts.md`, with a 🎵 notification (⚠️ if anything didn't make it).
+
+It uploads the same files as YouTube: `clipN-yt.mp4` when the clip is over 10 MB, and the Instagram caption (`clipN-caption.txt`) as it is. TikTok doesn't always show a link for a scheduled post, so a TikTok cell can be `scheduled` or `live` without one.
+
+```bash
+.venv/bin/python scripts/tiktok.py status                  # TikTok state and link of every clip
+.venv/bin/python scripts/tiktok.py plan [--date D]         # what the next run would upload
+.venv/bin/python scripts/tiktok.py run --date D --dry-run  # the exact instructions it would give Claude
+scripts/scheduler.sh tiktok-now                            # run today's TikTok job now
+```
+
+**To switch it on:**
+1. Set `ACCOUNT` at the top of `scripts/tiktok.py` to the TikTok handle (e.g. `"@poly_nomial"`). Until then the job logs that and does nothing.
+2. In Chrome, sign in to that account at tiktok.com and allow the Claude extension on tiktok.com.
+3. Run `/tiktok` in Claude once while watching, so any step in the skill that doesn't match TikTok Studio gets fixed before it runs unattended.
+
+The first run also picks up the day before's clips that aren't on TikTok yet (posting them straight away), like the YouTube job does.
+
 ### Permissions for unattended runs
 
 So `/clip` can write its files without asking, add this to `.claude/settings.json` (you add it yourself: Claude isn't allowed to change its own permissions):
@@ -219,6 +241,7 @@ So `/clip` can write its files without asking, add this to `.claude/settings.jso
       "Bash(.venv/bin/python scripts/render.py:*)",
       "Bash(.venv/bin/python scripts/schedule.py:*)",
       "Bash(.venv/bin/python scripts/youtube.py:*)",
+      "Bash(.venv/bin/python scripts/tiktok.py:*)",
       "Edit(./videos/**)",
       "Edit(./knowledge/**)"
     ],

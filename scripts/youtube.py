@@ -22,6 +22,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import fcntl
 import json
 import re
@@ -42,6 +43,7 @@ TARGET_SIZE = 9_300_000         # what the compressed copy aims for
 PUBLIC_NOW_WINDOW = 15 * 60     # a slot this close (or already past) is published now, not scheduled
 CLAUDE_TIMEOUT = 50 * 60
 CREDIT = "Full credits for the original video go to @"
+CHROME_LOCK = LOG_DIR / "chrome.lock"  # one Claude in Chrome run at a time (YouTube, TikTok)
 
 
 def log(msg):
@@ -55,6 +57,19 @@ def log(msg):
 def notify(icon, title, message):
     from post_instagram import notify as send  # shares the Instagram job's texts and Mac notifications
     send(icon, title, message)
+
+
+@contextlib.contextmanager
+def chrome_turn(log):
+    """Wait for any other Claude in Chrome run (YouTube or TikTok) to finish, then hold Chrome."""
+    LOG_DIR.mkdir(exist_ok=True)
+    with CHROME_LOCK.open("w") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            log("another Chrome run is in progress; waiting for it to finish")
+            fcntl.flock(f, fcntl.LOCK_EX)
+        yield
 
 
 # ── YouTube files for each clip ──────────────────────────────────────────────
@@ -253,7 +268,7 @@ def cmd_run(day, dry_run):
         log(f"YouTube run started: {', '.join(i['clip'] + ' (' + i['mode'] + ')' for i in items)}")
         transcript = LOG_DIR / f"youtube-claude-{datetime.now():%Y%m%d-%H%M}.log"
         try:
-            with transcript.open("w") as out:
+            with chrome_turn(log), transcript.open("w") as out:
                 result = subprocess.run(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT,
                                         stdin=subprocess.DEVNULL, timeout=CLAUDE_TIMEOUT)
             code = result.returncode
