@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from schedule import NO_TIKTOK, ROOT, fmt, locked, md_link, read_schedule, write_schedule  # noqa: E402
-from youtube import (CLAUDE_TIMEOUT, LOG_DIR, MAX_UPLOAD, chrome_turn, clip_paths,  # noqa: E402
+from youtube import (CLAUDE_MODEL, CLAUDE_TIMEOUT, LOG_DIR, MAX_UPLOAD, chrome_turn, clip_paths,  # noqa: E402
                      make_small_copy, notify, upload_file)
 
 ACCOUNT = "@_poly_nomial_"      # the TikTok handle; the job does nothing if this is empty
@@ -186,7 +186,7 @@ def cmd_run(day, dry_run):
                 log(f"nothing to upload to TikTok for {day:%a %d %b}")
                 return
             prompt = PROMPT.format(account=ACCOUNT or "(ACCOUNT not set yet)", plan=json.dumps(items, indent=2, ensure_ascii=False))
-            cmd = [claude, "-p", prompt, "--chrome", "--output-format", "text", "--allowedTools", *ALLOWED_TOOLS]
+            cmd = [claude, "-p", prompt, "--model", CLAUDE_MODEL, "--chrome", "--output-format", "text", "--allowedTools", *ALLOWED_TOOLS]
             if dry_run:
                 print(prompt)
                 print("Would run:", " ".join(cmd[:2] + ["<prompt>"] + cmd[3:]))

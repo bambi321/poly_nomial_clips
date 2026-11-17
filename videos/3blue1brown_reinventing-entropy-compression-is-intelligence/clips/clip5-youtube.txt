@@ -1,0 +1,8 @@
+From probing brains to building black boxes
+
+To measure how much information English carries, Claude Shannon counted how many guesses people needed to get each next letter right. He was really probing a hidden model of language: the human brain. Today we've gone from questioning black boxes that understand language to building them.
+
+Full credits for the original video go to @3blue1brown
+Original video: https://www.youtube.com/watch?v=l6DKRf-fAAM
+
+#science #math #informationtheory #claudeshannon #ai #language #3blue1brown #languagemodels #sciencefacts #education

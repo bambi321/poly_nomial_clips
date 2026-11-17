@@ -1,0 +1,5 @@
+As the story goes, Claude Shannon tested how predictable English is by asking his wife Betty to guess a book letter by letter. He kept only the letters she got wrong and replaced correct guesses with dashes. A perfect copy of Betty could rebuild the whole text from that shorter version, showing how predictability allows compression.
+
+Full credits for the original video go to @3blue1brown
+
+#science #math #informationtheory #claudeshannon #compression #language #3blue1brown #mathhistory #didyouknow #education

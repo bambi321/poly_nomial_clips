@@ -1,0 +1,8 @@
+Prediction and compression are the same thing
+
+AI language models are trained to predict the next word. Information theory says prediction and compression are two sides of the same coin. So training an AI can be seen as building the best possible text compressor.
+
+Full credits for the original video go to @3blue1brown
+Original video: https://www.youtube.com/watch?v=l6DKRf-fAAM
+
+#science #math #ai #machinelearning #informationtheory #compression #3blue1brown #largelanguagemodels #sciencefacts #education

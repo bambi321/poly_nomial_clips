@@ -236,14 +236,16 @@ def cmd_add(video, only, notify=False):
 def cmd_respace():
     with locked():
         rows = read_schedule()
-        pending = sorted((r for r in rows if r["status"] == "not-posted"), key=lambda r: r["when"])
+        pending = sorted((r for r in rows if r["status"] in ("not-posted", "failed")), key=lambda r: r["when"])
         free = slots_after(datetime.now())
         for r in pending:
             r["when"] = next(free)
-        posted = [r for r in rows if r["status"] != "not-posted"]
+        posted = [r for r in rows if r["status"] not in ("not-posted", "failed")]
         write_schedule(sorted(posted, key=lambda r: r["when"]) + pending)
     for r in pending:
         print(f"{r['clip']} → {fmt(r['when'])}: {r['title']}")
+        if r["status"] == "failed":
+            r["status"] = "not-posted"
         if r.get("youtube", NO_YOUTUBE).startswith("[scheduled"):
             print(f"  note: {r['clip']} is already scheduled on YouTube for its old time; "
                   "change it in YouTube Studio if it should move too")

@@ -1,0 +1,8 @@
+English is about 1 bit per letter
+
+Nobody can calculate the exact entropy of English, so Claude Shannon estimated it by having people guess the next letter. With about 100 letters of context, he put it at roughly 1 bit per character. That suggests English could be squeezed down to about one yes-or-no answer per letter.
+
+Full credits for the original video go to @3blue1brown
+Original video: https://www.youtube.com/watch?v=l6DKRf-fAAM
+
+#science #math #entropy #informationtheory #claudeshannon #language #3blue1brown #compression #sciencefacts #education

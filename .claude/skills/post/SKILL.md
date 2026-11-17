@@ -1,15 +1,15 @@
 ---
 name: post
-description: Check on or control the Instagram posting job (10am, 1pm and 5pm daily). Shows what's posted, what's next and recent errors; can dry-run, post the due clip now, send test notifications, or pause and resume the scheduler. Use when the user runs /post, or asks about posting, the schedule, the scheduler, or why a post did or didn't go out.
-argument-hint: [status | dry-run | now | test-alert | pause | resume]
-allowed-tools: Bash(scripts/scheduler.sh:*), Bash(.venv/bin/python scripts/post_instagram.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Bash(tail:*), Read, Edit
+description: Check on or control the Instagram posting job (runs at 10am; clips go out at 10am, 1pm and 5pm). Shows what's posted, what's next and recent errors; can dry-run, post the due clip now, send test notifications, or pause and resume the scheduler. Use when the user runs /post, or asks about posting, the schedule, the scheduler, or why a post did or didn't go out.
+argument-hint: [status | dry-run | now | api | test-alert | pause | resume]
+allowed-tools: Bash(scripts/scheduler.sh:*), Bash(.venv/bin/python scripts/instagram.py:*), Bash(.venv/bin/python scripts/post_instagram.py:*), Bash(.venv/bin/python scripts/schedule.py:*), Bash(tail:*), Read, Edit
 ---
 
 # /post
 
 Arguments: $ARGUMENTS (default: `status`)
 
-The job is a macOS LaunchAgent that runs `scripts/post_instagram.py` at each slot: 10:00, 13:00 and 17:00 Melbourne/Sydney time (`SLOTS` in `scripts/schedule.py`). Instagram downloads each clip from a temporary Cloudflare tunnel link (`scripts/tunnel.py`). Each run posts the earliest `not-posted` clip in `release-schedule.md` whose date and time have passed (one per run), marks it `posted`, and adds a line to the video's `posts.md`. To see or change the queue, use `.venv/bin/python scripts/schedule.py list` (or `respace`), never a hand edit. It texts the user when it starts (▶️), finishes (⏹) and fails (⚠️). Logs are in `logs/post.log`.
+The job is a macOS LaunchAgent that runs `scripts/instagram.py run` once a day at 10:00 (the first of `SLOTS` in `scripts/schedule.py`). It starts Claude (Sonnet) with the Claude in Chrome extension, which follows `.claude/skills/instagram-web/SKILL.md` on instagram.com: the 10:00 clip is shared straight away and the 13:00 and 17:00 clips are scheduled with the composer's "Schedule content" switch. It also retries the previous day's `failed`/`not-posted` clips. Each clip's Status becomes `posted`, `scheduled` or `failed`, and a line goes in the video's `posts.md`. It runs before the YouTube (10:05) and TikTok (10:15) jobs, which wait for it to finish with Chrome. The old Graph API poster (`scripts/post_instagram.py`, via a Cloudflare tunnel) is kept as a manual fallback (`api` below). To see or change the queue, use `.venv/bin/python scripts/schedule.py list` (or `respace`), never a hand edit. It notifies the user when it's done (📸) or fails (⚠️). Logs are in `logs/instagram.log`, with Claude's report in `logs/instagram-claude-*.log`; the API fallback logs to `logs/post.log`.
 
 Never print or read out `.env` values.
 
@@ -23,11 +23,15 @@ Run `scripts/scheduler.sh status`. Report in a few lines:
 
 ## dry-run
 
-Run `.venv/bin/python scripts/post_instagram.py --dry-run` (add `--as-of "YYYY-MM-DD HH:MM"` to preview a future slot). Show what would post and the caption. Nothing is posted.
+Run `.venv/bin/python scripts/instagram.py run --dry-run` (add `--date YYYY-MM-DD` to preview another day). Show which clips would be shared now or scheduled, and for when. Nothing is posted.
 
 ## now
 
-Posts the due clip immediately, the same as a scheduled run. **Ask the user to confirm first.** Then run `scripts/scheduler.sh run-now`, wait about a minute, and read `logs/post.log`. If nothing is due yet, say so. It won't post a future clip early. To bring the queue forward, run `schedule.py respace`, which moves every unposted clip to consecutive slots starting with the next one.
+Runs the day's Instagram job immediately (shares anything due, schedules the rest). **Ask the user to confirm first.** Then run `scripts/scheduler.sh run-now`; it takes a few minutes per clip. Read `logs/instagram.log` and the newest `logs/instagram-claude-*.log` when it's done.
+
+## api
+
+The fallback when the Chrome job can't run: posts the earliest due `not-posted` or `failed` clip through the Graph API. **Ask the user to confirm first.** Run `scripts/scheduler.sh run-api` and read `logs/post.log`. To bring the queue forward, run `schedule.py respace`, which moves every unposted clip to consecutive slots starting with the next one.
 
 ## test-alert
 
@@ -38,12 +42,16 @@ Run `scripts/scheduler.sh test-alert`. It sends the start, finish and failure te
 - pause: `scripts/scheduler.sh uninstall`
 - resume: `scripts/scheduler.sh install`
 
-Pausing doesn't change the schedule. Clips due while paused post one per slot after resuming. Run `schedule.py respace` after resuming to put them back on evenly spaced slots.
+Pausing doesn't change the schedule, and reels already scheduled on Instagram still go out. A resumed job only picks up clips from the previous day onwards. Run `schedule.py respace` after resuming to put them back on evenly spaced slots.
 
 ## Common failures
 
+The rows after the first two are from the API fallback (`logs/post.log`).
+
 | Log says | Fix |
 |---|---|
+| `Instagram run incomplete` | Read the newest `logs/instagram-claude-*.log` for what Claude saw (sign-in, CAPTCHA, extension not connected). Fix that, then `now`, or `api` for a clip that's already due |
+| `another Chrome run is in progress` | The YouTube or TikTok job had Chrome; the Instagram job waited and then ran. Nothing to do |
 | `video file is missing` | The `.mp4` was deleted or moved. Re-render with `/render`, or fix the path in `release-schedule.md` |
 | `caption file is missing` / `no creator credit line` | Write or fix `clipN-caption.txt` per `playbooks/captions.md` |
 | `OAuthException` / `Invalid OAuth access token` | The token was revoked or changed. Generate a new one in the Meta app and replace it in `.env` |

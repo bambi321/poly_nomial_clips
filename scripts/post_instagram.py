@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Post the next due clip from release-schedule.md to Instagram as a Reel.
+"""Post the next due clip from release-schedule.md to Instagram as a Reel, through the Graph API.
+
+This is the manual fallback (scripts/scheduler.sh run-api). The daily job is scripts/instagram.py,
+which uploads through instagram.com in Chrome. This file also holds notify(), used by every job.
 
 Usage:
-    python scripts/post_instagram.py              post the clip that's due (used by the 10am, 1pm and 5pm jobs)
+    python scripts/post_instagram.py              post the clip that's due (scheduler.sh run-api)
     python scripts/post_instagram.py --dry-run    show what would post and check everything, without posting
     python scripts/post_instagram.py --dry-run --as-of "2026-11-14 17:00"   same, pretending it's then
     python scripts/post_instagram.py --status     show the schedule, what's next, and recent log lines
@@ -16,7 +19,7 @@ Upload method (INSTAGRAM_UPLOAD_METHOD in .env, default "tunnel"):
     resumable  push the file to Instagram's upload server
 
 How it picks a clip:
-    The earliest row in release-schedule.md that is `not-posted` and whose date and time have
+    The earliest row in release-schedule.md that is `not-posted` or `failed` and whose date and time have
     passed. At most one clip per run, so missed slots are caught up one clip per run.
     The slot times live in scripts/schedule.py (SLOTS).
 
@@ -269,7 +272,7 @@ def publish_reel(user_id, video, caption):
 def mark_posted(row):
     lines = SCHEDULE.read_text().splitlines()
     line = lines[row["line"]]
-    lines[row["line"]] = re.sub(r"\|\s*not-posted\s*\|\s*$", "| posted |", line)
+    lines[row["line"]] = re.sub(r"\|\s*(not-posted|failed)\s*\|\s*$", "| posted |", line)
     SCHEDULE.write_text("\n".join(lines) + "\n")
 
 
@@ -282,7 +285,7 @@ def record_post(row, link):
 
 
 def due_row(rows, now):
-    pending = [r for r in rows if r["status"] == "not-posted" and r["when"] <= now]
+    pending = [r for r in rows if r["status"] in ("not-posted", "failed") and r["when"] <= now]
     return min(pending, key=lambda r: r["when"]) if pending else None
 
 

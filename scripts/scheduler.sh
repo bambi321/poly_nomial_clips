@@ -1,16 +1,21 @@
 #!/bin/bash
-# Manage the Instagram post job (a macOS LaunchAgent) that runs at each daily slot.
-# The slot times (10:00, 13:00 and 17:00, the Mac's local time) come from SLOTS in scripts/schedule.py.
+# Manage the daily posting jobs (macOS LaunchAgents). Clips go out at the slots in SLOTS in
+# scripts/schedule.py (10:00, 13:00 and 17:00, the Mac's local time); every platform is driven
+# once a day, at the first slot, through Chrome with the Claude in Chrome extension: the 10:00 clip
+# goes up straight away and the later ones are scheduled in each app for their times.
 #
-#   scripts/scheduler.sh install      turn on (or update after changing SLOTS): post the due clip at each slot
+#   scripts/scheduler.sh install      turn on (or update after changing SLOTS)
 #   scripts/scheduler.sh uninstall    turn off (nothing else changes; install again to resume)
 #   scripts/scheduler.sh status       is it on, when did it last run, what's next
-#   scripts/scheduler.sh run-now      run the real job immediately (posts if a clip is due)
+#   scripts/scheduler.sh run-now      run the Instagram job immediately (uploads today's clips not on Instagram yet)
+#   scripts/scheduler.sh run-api      fallback: post the earliest due Instagram clip now through the Graph API
 #   scripts/scheduler.sh test-alert   send test start, finish and failure texts from the job's context,
 #                                     so macOS asks for any permission while you're watching
 #   scripts/scheduler.sh youtube-now  run the YouTube job immediately (uploads today's clips that aren't on YouTube yet)
 #   scripts/scheduler.sh tiktok-now   run the TikTok job immediately (uploads today's clips that aren't on TikTok yet)
 #
+# The Instagram job (com.polynomial.clips.post) runs scripts/instagram.py run at the first slot and
+# has Claude upload the day's clips on instagram.com (.claude/skills/instagram-web). Log: logs/instagram.log.
 # install also sets up the YouTube job (com.polynomial.clips.youtube): every day at 10:05 it runs
 # scripts/youtube.py run, which has Claude upload the day's clips in YouTube Studio through the
 # Claude in Chrome extension (the 10:00 clip public, the 13:00 and 17:00 clips scheduled).
@@ -18,8 +23,8 @@
 # The TikTok job (com.polynomial.clips.tiktok) does the same in TikTok Studio at 10:15 with
 # scripts/tiktok.py run; if the YouTube run is still using Chrome it waits. Log: logs/tiktok.log.
 #
-# The job runs while you're logged in (a locked screen is fine). It does not need Claude
-# or a terminal open. Output goes to logs/post.log and logs/launchd.log.
+# The jobs run while you're logged in (a locked screen is fine) and need Chrome open, signed in,
+# with the extension connected. They don't need a terminal open. Output also goes to logs/launchd.log.
 
 set -euo pipefail
 
@@ -35,25 +40,12 @@ TT_LABEL="com.polynomial.clips.tiktok"
 TT_PLIST="$HOME/Library/LaunchAgents/$TT_LABEL.plist"
 TT_TIME="10:15"
 SLOTS="$("$PYTHON" "$REPO/scripts/schedule.py" slots)"   # e.g. "10:00 13:00 17:00"
+IG_TIME="${SLOTS%% *}"                                     # Instagram runs at the first slot
 
-write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
+write_plist() {  # $1 = plist path, $2 = label, $3.. = post_instagram.py args; a one-off job, no schedule
   local path="$1" label="$2"; shift 2
   local args=""
   for a in "$@"; do args+="    <string>$a</string>"$'\n'; done
-  local schedule=""
-  if [ "$label" = "$LABEL" ]; then
-    schedule="  <key>StartCalendarInterval</key>
-  <array>"
-    for slot in $SLOTS; do
-      schedule+="
-    <dict>
-      <key>Hour</key><integer>$((10#${slot%%:*}))</integer>
-      <key>Minute</key><integer>$((10#${slot##*:}))</integer>
-    </dict>"
-    done
-    schedule+="
-  </array>"
-  fi
   mkdir -p "$(dirname "$path")" "$REPO/logs"
   cat > "$path" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -67,7 +59,6 @@ write_plist() {  # $1 = plist path, $2 = label, $3.. = extra script args
     <string>$REPO/scripts/post_instagram.py</string>
 $args  </array>
   <key>WorkingDirectory</key><string>$REPO</string>
-$schedule
   <key>StandardOutPath</key><string>$REPO/logs/launchd.log</string>
   <key>StandardErrorPath</key><string>$REPO/logs/launchd.log</string>
   <key>EnvironmentVariables</key>
@@ -117,7 +108,7 @@ is_loaded() { launchctl print "$DOMAIN/$1" >/dev/null 2>&1; }
 case "${1:-status}" in
   install)
     [ -x "$PYTHON" ] || { echo "Missing $PYTHON. Set up the Python environment first (see README)."; exit 1; }
-    write_plist "$PLIST" "$LABEL"
+    write_chrome_plist "$PLIST" "$LABEL" instagram.py "$IG_TIME"
     is_loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST"
     write_chrome_plist "$YT_PLIST" "$YT_LABEL" youtube.py "$YT_TIME"
@@ -126,7 +117,7 @@ case "${1:-status}" in
     write_chrome_plist "$TT_PLIST" "$TT_LABEL" tiktok.py "$TT_TIME"
     is_loaded "$TT_LABEL" && launchctl bootout "$DOMAIN/$TT_LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$TT_PLIST"
-    echo "Scheduler on: posts the due clip every day at ${SLOTS// /, }."
+    echo "Instagram job on: uploads the day's clips at $IG_TIME (clips go out at ${SLOTS// /, }; needs Chrome open with the Claude extension)."
     echo "YouTube job on: uploads the day's clips at $YT_TIME (needs Chrome open with the Claude extension)."
     echo "TikTok job on: uploads the day's clips at $TT_TIME, after YouTube (does nothing until ACCOUNT is set in scripts/tiktok.py)."
     ;;
@@ -141,10 +132,10 @@ case "${1:-status}" in
     ;;
   status)
     if is_loaded "$LABEL"; then
-      echo "Scheduler: ON (daily at ${SLOTS// /, })"
+      echo "Instagram job: ON (daily at $IG_TIME; clips go out at ${SLOTS// /, })"
       launchctl print "$DOMAIN/$LABEL" | grep -E "last exit code|runs =" | sed 's/^[[:space:]]*/  /' || true
     else
-      echo "Scheduler: OFF"
+      echo "Instagram job: OFF"
     fi
     if is_loaded "$YT_LABEL"; then
       echo "YouTube job: ON (daily at $YT_TIME)"
@@ -164,7 +155,10 @@ case "${1:-status}" in
   run-now)
     is_loaded "$LABEL" || { echo "Scheduler is off. Run: scripts/scheduler.sh install"; exit 1; }
     launchctl kickstart "$DOMAIN/$LABEL"
-    echo "Started. Follow along with: tail -f $REPO/logs/post.log"
+    echo "Started. Follow along with: tail -f $REPO/logs/instagram.log"
+    ;;
+  run-api)
+    "$PYTHON" "$REPO/scripts/post_instagram.py"
     ;;
   youtube-now)
     is_loaded "$YT_LABEL" || { echo "YouTube job is off. Run: scripts/scheduler.sh install"; exit 1; }
@@ -189,5 +183,5 @@ case "${1:-status}" in
     tail -n 3 "$REPO/logs/post.log"
     ;;
   *)
-    echo "Usage: scripts/scheduler.sh install|uninstall|status|run-now|youtube-now|tiktok-now|test-alert"; exit 1 ;;
+    echo "Usage: scripts/scheduler.sh install|uninstall|status|run-now|run-api|youtube-now|tiktok-now|test-alert"; exit 1 ;;
 esac

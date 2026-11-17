@@ -1,0 +1,8 @@
+Why it's called "entropy": nobody knows what it is
+
+Legend has it that John von Neumann told Claude Shannon to call his new formula "entropy". The joke was that nobody really knows what entropy is, so you'd always win an argument. The video admits the story is probably made up, but there's a grain of truth to it.
+
+Full credits for the original video go to @3blue1brown
+Original video: https://www.youtube.com/watch?v=l6DKRf-fAAM
+
+#science #math #entropy #informationtheory #claudeshannon #vonneumann #3blue1brown #mathhistory #didyouknow #education

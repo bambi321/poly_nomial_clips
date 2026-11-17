@@ -5,7 +5,7 @@ Until the Google Cloud project passes YouTube's API audit, API uploads are locke
 So once a day (10:05, scripts/scheduler.sh) this starts Claude Code in the background with the
 Claude in Chrome extension, which follows .claude/skills/youtube/SKILL.md to upload the day's
 clips in YouTube Studio: the 10:00 clip goes public straight away, the 13:00 and 17:00 clips are
-uploaded and scheduled for their times. Instagram is unaffected and keeps its own job.
+uploaded and scheduled for their times. The Instagram job (scripts/instagram.py) does the same at 10:00.
 
 Usage:
     python scripts/youtube.py prep [<video>...]   make the YouTube files for every queued clip (or these videos):
@@ -42,8 +42,9 @@ MAX_UPLOAD = 9_500_000          # Claude in Chrome's file upload limit is 10 MB 
 TARGET_SIZE = 9_300_000         # what the compressed copy aims for
 PUBLIC_NOW_WINDOW = 15 * 60     # a slot this close (or already past) is published now, not scheduled
 CLAUDE_TIMEOUT = 50 * 60
+CLAUDE_MODEL = "sonnet"         # the morning jobs follow a fixed checklist, so they run on Sonnet to save usage
 CREDIT = "Full credits for the original video go to @"
-CHROME_LOCK = LOG_DIR / "chrome.lock"  # one Claude in Chrome run at a time (YouTube, TikTok)
+CHROME_LOCK = LOG_DIR / "chrome.lock"  # one Claude in Chrome run at a time (Instagram, YouTube, TikTok)
 
 
 def log(msg):
@@ -259,7 +260,7 @@ def cmd_run(day, dry_run):
             return
         prompt = PROMPT.format(plan=json.dumps(items, indent=2, ensure_ascii=False))
         claude = shutil.which("claude") or "/opt/homebrew/bin/claude"
-        cmd = [claude, "-p", prompt, "--chrome", "--output-format", "text", "--allowedTools", *ALLOWED_TOOLS]
+        cmd = [claude, "-p", prompt, "--model", CLAUDE_MODEL, "--chrome", "--output-format", "text", "--allowedTools", *ALLOWED_TOOLS]
         if dry_run:
             print(prompt)
             print("Would run:", " ".join(cmd[:2] + ["<prompt>"] + cmd[3:]))
