@@ -123,11 +123,17 @@ aren't in this run, and never change account settings.
 
 ## 3. Finish
 
-Close the tab you used (`tabs_close_mcp`). Then write a short report: one line per clip with what
+Close every tab in your Chrome group, not just the one you worked in: call `tabs_context_mcp` and
+`tabs_close_mcp` each tab it lists. Closing the last one removes the group, so nothing is left
+behind in the user's Chrome. If a page won't close because it asks to confirm leaving, discard the
+unfinished post with the page's own Discard/Cancel button first, then close it. Do this on every run,
+including one that stopped early (see below). Then write a short report: one line per clip with what
 happened and its link, plus anything that didn't match this file. The job turns the schedule into
 a notification.
 
 ## When something blocks the whole run
+
+After recording, still close your tabs as in step 3 before you report.
 
 | What you see | Do |
 |---|---|
